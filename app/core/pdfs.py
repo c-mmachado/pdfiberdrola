@@ -232,7 +232,7 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
                             None,
                             None,
                             None,
-                            None,
+                            m,
                             None,
                             parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Value'],
                             parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Unit'],
