@@ -202,7 +202,6 @@ def parse_pdf(pdf_path: str, out_dir, df: Dict[PdfType, pandas.DataFrame]) -> pa
             LOG.debug(f'Parsing {PdfType.MV} PDF...')
             parse_result = _parse_mv_pdf(iter(pdf_pages), parse_result, df[PdfType.MV])
             os.makedirs('out', exist_ok=True)
-            df[PdfType.MV].
             return parse_result
         case _:
             LOG.debug(f'Unknown PDF type')
