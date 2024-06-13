@@ -173,7 +173,7 @@ def _resolve_pdf_type(first_page: PageObject) -> PdfType:
         return PdfType.PREVENTIVE
     return PdfType.UNKNOWN
 
-def parse_pdf(pdf_path: str, out_dir, df: Dict[PdfType, pandas.DataFrame]) -> pandas.DataFrame:
+def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) -> pandas.DataFrame:
     LOG.debug(f'Parsing PDF from {pdf_path}...')
     
     pdf_reader = PdfReader(pdf_path)
@@ -202,6 +202,9 @@ def parse_pdf(pdf_path: str, out_dir, df: Dict[PdfType, pandas.DataFrame]) -> pa
             LOG.debug(f'Parsing {PdfType.MV} PDF...')
             parse_result = _parse_mv_pdf(iter(pdf_pages), parse_result, df[PdfType.MV])
             os.makedirs('out', exist_ok=True)
+            
+            
+            
             return parse_result
         case _:
             LOG.debug(f'Unknown PDF type')
@@ -310,6 +313,7 @@ def parse_pdfs(pdfs_path: Sequence[str], output_dir: str, excel_template: str = 
     LOG.debug(f'\n{df[PdfType.PREVENTIVE]}')
     LOG.debug(f'\n{df[PdfType.MV]}')
     
-    parse_results: Sequence[pandas.DataFrame] = [parse_pdf(f'{pdfs_path}/{f}', df) for f in [os.listdir(pdfs_path)[0]] if f.endswith('.pdf')]
-    
+    for f in [os.listdir(pdfs_path)[0]]:
+        if f.endswith('.pdf'):
+            parse_pdf(f'{pdfs_path}/{f}', output_dir, df)
     pass
