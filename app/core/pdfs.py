@@ -160,8 +160,6 @@ def _parse_mv_pdf(pdf_pages: Iterator[PageObject], parse_result: Dict[AnyStr, An
         current_measure, current_number = _parse_mv_pdf_page(current_number, current_measure, pdf_page, idx, parse_result, df)
         print(f'RET MEASURE {current_measure}\nRET NUMBER {current_number}')
         idx += 1
-        if idx == 6:
-            break
 
 def _resolve_pdf_type(first_page: PageObject) -> PdfType:
     page_lines: str = first_page.extract_text(extraction_mode='layout').split('\n')
@@ -200,11 +198,54 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
             return None
         case PdfType.MV:
             LOG.debug(f'Parsing {PdfType.MV} PDF...')
-            parse_result = _parse_mv_pdf(iter(pdf_pages), parse_result, df[PdfType.MV])
-            os.makedirs('out', exist_ok=True)
+            _parse_mv_pdf(iter(pdf_pages), parse_result, df[PdfType.MV])
             
+            os.makedirs(f'{out_dir}', exist_ok=True)
             
+            print(df[PdfType.MV].columns)
             
+            for task in parse_result['Tasks']:
+                for e in parse_result['Tasks'][task]['Elements']:
+                    df[PdfType.MV].loc[-1] = [
+                        parse_result['WTG'],
+                        parse_result['ChecklistName'],
+                        parse_result['RevisionDate'],
+                        parse_result['OrderNumber'],
+                        parse_result['ApprovalDate'],
+                        parse_result['Tasks'][task]['WTGSection'],
+                        parse_result['Tasks'][task]['Elements'][e]['Description'],
+                        parse_result['Tasks'][task]['Elements'][e]['Remarks'],
+                        None,
+                        None,
+                        parse_result['Tasks'][task]['Elements'][e]['Status'],
+                        None,
+                        None,
+                        None
+                    ]
+                    df[PdfType.MV].index = df[PdfType.MV].index + 1  
+                    
+                    for m in parse_result['Tasks'][task]['Elements'][e]['Measures']:
+                        df[PdfType.MV].loc[-1] = [
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Value'],
+                            parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Unit'],
+                            None,
+                            None,
+                            None,
+                            None
+                        ]
+                        df[PdfType.MV].index = df[PdfType.MV].index + 1  
+            
+            print(df[PdfType.MV].head())
+            
+            df[PdfType.MV].to_excel(f'{out_dir}/output.xlsx', index=False, sheet_name='MV')
             return parse_result
         case _:
             LOG.debug(f'Unknown PDF type')
