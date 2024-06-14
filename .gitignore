@@ -206,5 +206,7 @@ pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,venv,python
 
+# Custom ignore rules
 logs/
 out/
+!config/*
