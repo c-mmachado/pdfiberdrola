@@ -1,29 +1,29 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from ast import parse
-from math import e
 import re
 import os
 import json
 import logging
 from enum import StrEnum
-
-from typing import Any, AnyStr, Dict, Iterator, List, Sequence
+from collections import  deque
+from tempfile import TemporaryDirectory
+from typing import Any, AnyStr, Dict, Iterator, List, Sequence, Tuple
 
 # Third-Party Imports
-from numpy import sort
 import pandas
 from PIL import Image
 from matplotlib import patches, pyplot as plt
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
-from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent
+from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, Rect
 from pdf2image import convert_from_path
 
 os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
 
 # Local Imports
+from app.model.pdfs import PDFLayoutContainer, PDFLayoutElement, PDFLayoutLine
+from app.utils.files import create_dir
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
@@ -179,18 +179,13 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
     parse_result: Dict[AnyStr, Any] = dict()
     parse_result['Type'] = _resolve_pdf_type(pdf_pages[0])
     
-    # pdf_pages: Iterator[LTPage] = extract_pages(pdf_path)
-    # idx = 0
-    # while (pdf_page := next(pdf_pages, None)) != None:
-    #     LOG.debug(f'Page {idx + 1}:\n {pdf_page}')
-    #     # _highlight_bounding_boxes_for_page(pdf_path, idx, pdf_page)
-    #     _sort_top_left_page_elements(pdf_page)
-    #     idx += 1
-    #     if idx == 3:
-    #         break
+    # _highlight_bounding_boxes_pdf(pdf_path, out_dir)
+    pdf_pages = extract_pages(pdf_path)
+    _sort_top_left_page_elements(next(pdf_pages))
+    _sort_top_left_page_elements(next(pdf_pages))
     
     # LOG.debug(f'PDF type: {parse_result['Type']}')
-    
+    return parse_result
     match parse_result['Type']:
         case PdfType.PREVENTIVE:
             LOG.debug(f'Parsing {PdfType.PREVENTIVE} PDF...')
@@ -251,110 +246,146 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
             LOG.debug(f'Unknown PDF type')
             raise PdfParseException(f'Unknown PDF type for {pdf_path}')
 
-class LayoutElement:
-    element: LTComponent
-    children: List['LayoutElement']
+def _sort_top_left_page_elements(page: LTPage) -> PDFLayoutElement:
+    root = PDFLayoutContainer(page)
+    components: List[LTComponent] = sorted(page, key=lambda e: (e.bbox[1], -e.bbox[0]))
+    components_stack = deque(components, maxlen=len(components))
+    lines: List[LTLine] = []
+    seen = 0
+    
+    while seen < len(components) and len(components_stack) > 0:
+        component: LTComponent = components_stack.popleft()
+        seen += 1
+        
+        if isinstance(component, (LTTextContainer)):
+            components_stack.append(component)
+            continue
+        
+        if isinstance(component, (LTImage, LTFigure)):
+            root.child(PDFLayoutElement(component))
+            continue
+        
+        if isinstance(component, (LTRect)):
+            el = PDFLayoutContainer(component)
+            # root.child(el)
+            x0, y0, x1, y1 = component.bbox
+            lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x1, y0))))
+            lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x0, y1))))
+            lines.append(PDFLayoutLine(LTLine(component.linewidth, (x1, y0), (x1, y1))))
+            lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y1), (x1, y1))))
+            continue
+        
+        if isinstance(component, (LTLine)):
+            el0 = PDFLayoutLine(component)
+            lines.append(el0)
+            continue
+    
+    lines_stack = deque(sorted(lines, key=lambda e: (e.bbox['x0'], e.bbox['y0'])), maxlen=len(lines))
+    print(lines_stack)
+    while len(lines_stack) > 0:
+        lines_stack.popleft()
+        
+    # LOG.debug(f'Parsed PDF page layout:\n {root}')
+    # LOG.debug(f'Parsed PDF page children count: {len(root.children())}')
+    # LOG.debug(f'Visited page {page.pageid} components count: {seen}')
+    # LOG.debug(f'Aggregatted decoupled lines:\n {lines}')
+    return root
 
-def _sort_top_left_page_elements(page: LTPage) -> LayoutElement:
-    root = LayoutElement(page, [])
-    page_elements: List[LTComponent] = sorted(page, key=lambda e: (-e.bbox[1], e.bbox[0]))
-    
-    for element1 in page_elements:
-        bbox1: Dict[str, float] = {
-            'x1': element1.bbox[0], 
-            'y1': element1.bbox[1], 
-            'x2': element1.bbox[2], 
-            'y2': element1.bbox[3],
-        }
+def _highlight_bounding_boxes_pdf(pdf_path: str, out_dir: str, dpi: int = 500) -> None:
+    try:
+        pdf_pages_iter: Iterator[LTPage] = extract_pages(pdf_path)
         
-        print(f'e1 {bbox1}')
-        print(element1)
-        
-        layout1 = LayoutElement(element2, [])
-        
-        for element2 in page_elements:
-            if element1 == element2:
-                continue
-            
-            layout2 = LayoutElement(element2, [])
-            
-            if(isinstance(element2, LTRect)):
-                bbox2: Dict[str, float] = {
-                    'x1': element2.bbox[0], 
-                    'y1': element2.bbox[1], 
-                    'x2': element2.bbox[2], 
-                    'y2': element2.bbox[3],
-                }
-                
-                # If bottom-left inner box corner is inside the bounding box
-                if bbox1['x1'] >= bbox2['x1'] and bbox1['y1'] >= bbox2['y1'] and bbox1['x1'] <= bbox2['x2'] and bbox1['y1'] <= bbox2['y2']:
-                    # If top-right inner box corner is inside the bounding box
-                    if bbox1['x2'] <= bbox2['x2'] and bbox1['y2'] <= bbox2['y2']:
-                        # The entire box is inside the bounding box.
-                        print(f'e2 {bbox2}')
-                        print(element2)
-                        print('The entire box is inside the bounding box.')
-                    else:
-                        # Some part of the box is outside the bounding box (Consider area% cutoff to be inside the bounding box)
-                        print(f'e2 {bbox2}')
-                        print(element2)
-                        print('Some part of the box is outside the bounding box')
-                        
-                    root.children.index(layout2)
-                    layout2.children.append(layout1)
-    
-        root.children.append(layout1)
-    
-    for element, children in page_tree.items():
-        print(f'Element: {element}')
-        print(f'Children: {children}')
-    return 
-    
+        with TemporaryDirectory() as temp_dir:
+            pdf_page_img_paths_iter: Iterator[str] = iter(convert_from_path(pdf_path, 
+                                                                            dpi=dpi, 
+                                                                            output_folder=temp_dir, 
+                                                                            paths_only=True, 
+                                                                            thread_count=4))
+            while pdf_page := next(pdf_pages_iter, None) != None:
+                _highlight_bounding_boxes_pdf_page(next(pdf_page_img_paths_iter), pdf_page)
+    except Exception as e:
+        LOG.error(f'Error while highlighting bounding boxes for pdf {pdf_path}:\n {e}')
+        raise e
+    finally:
+        plt.close('all')
 
-def _highlight_bounding_boxes_for_page(pdf_path: str, idx: int, pdf_page: LTPage) -> None:
-     # https://stackoverflow.com/questions/68003007/how-to-extract-text-boxes-from-a-pdf-and-convert-them-to-image
-    dpi_target=500
-    pages: List[Image.Image] = convert_from_path(pdf_path, dpi=dpi_target, first_page=idx, last_page=idx + 1)
-    pages[idx].save(f'out/out{idx}.png', 'PNG')
+def _highlight_bounding_boxes_pdf_page(pdf_page_img_path: str, 
+                                       pdf_page: LTPage,
+                                       out_dir: str,
+                                       dpi: int = 500) -> None:
+    # https://stackoverflow.com/questions/68003007/how-to-extract-text-boxes-from-a-pdf-and-convert-them-to-image
+    pdf_page_img: Image.Image = Image.open(pdf_page_img_path)
+    plt.imshow(pdf_page_img)
     
-    im: Image.Image = Image.open(f'out/out{idx}.png')
-    plt.imshow(im)
-    
-    dpi: float = dpi_target / 72 # magic 72
+    adjusted_dpi: float = dpi / 72 # magic 72
     vertical_shift = 5 # I don't know, but it's need to shift a bit
-    page_height = int(pdf_page.height * dpi)
+    page_height = int(pdf_page.height * adjusted_dpi)
     for element in pdf_page:
         LOG.debug(f'Page Element: {element}')
         
-        # correction PDF --> PIL
-        startY: int = page_height - int(element.bbox[1] * dpi) - vertical_shift
-        endY: int = page_height - int(element.bbox[3]   * dpi) - vertical_shift
-        startX = int(element.bbox[0] * dpi)
-        endX   = int(element.bbox[2] * dpi)
+        # Correction PDF --> PIL
+        startY: int = page_height - int(element.bbox[1] * adjusted_dpi) - vertical_shift
+        endY: int = page_height - int(element.bbox[3]   * adjusted_dpi) - vertical_shift
+        startX = int(element.bbox[0] * adjusted_dpi)
+        endX   = int(element.bbox[2] * adjusted_dpi)
+        rectWidth: int = endX - startX
+        rectHeight: int = endY - startY
+        
+        edgecolor: Tuple[float, float, float] = (1, 0, 0.5) 
         if(isinstance(element, LTRect)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.25, edgecolor='r', facecolor='none'))
-        if(isinstance(element, LTTextContainer)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.125, edgecolor='b', facecolor='none'))
-        if(isinstance(element, LTImage)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.125, edgecolor='g', facecolor='none'))
-        if(isinstance(element, LTFigure)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.125, edgecolor='m', facecolor='none'))
-        if(isinstance(element, LTCurve)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.125, edgecolor='c', facecolor='none'))
-        if(isinstance(element, LTLine)):
-            plt.gca().add_patch(patches.Rectangle((startX, startY), endX - startX, endY - startY, linewidth=0.125, edgecolor='y', facecolor='none'))
-    plt.savefig(f'out/out{idx}.png', dpi=dpi_target, bbox_inches='tight')
+            edgecolor = (1, 0, 0) # red
+        elif(isinstance(element, LTTextContainer)):
+            edgecolor = (0, 1, 0) # green
+        elif(isinstance(element, LTImage)):
+            edgecolor = (0, 0, 1) # blue
+        elif(isinstance(element, LTFigure)):
+            edgecolor = (1, 0, 1) # magenta
+        elif(isinstance(element, LTCurve)):
+            edgecolor = (0, 1, 1) # cyan
+        elif(isinstance(element, LTLine)):
+            edgecolor = (1, 1, 0) # yellow
+            
+        def make_rgb_transparent(rgb: Tuple[float, float, float], 
+                                 bg_rgb: Tuple[float, float, float], 
+                                 alpha: float) -> Tuple[float, float, float, float]:
+            return [alpha * c1 + (1 - alpha) * c2 for (c1, c2) in zip(rgb, bg_rgb)]
+        
+        facecolor: Tuple[float, float, float, float] = make_rgb_transparent(edgecolor, (1, 1, 1), 0.5)
+        
+        plt.gca().add_patch(
+            patches.Rectangle(
+                (startX, startY), 
+                rectWidth, rectHeight, 
+                linewidth=0.3, 
+                edgecolor=edgecolor,
+                facecolor=facecolor,
+                alpha=0.5
+            )
+        )
+    plt.axis('off')
+    plt.savefig(f'out/{os.path.basename(pdf_page_img_path)}.png', dpi=dpi, bbox_inches='tight')
     plt.cla()
     plt.clf()
+    plt.close()
 
 def parse_pdfs(pdfs_path: Sequence[str], output_dir: str, excel_template: str = DEFAULT_EXCEL_TEMPLATE) -> None:
-    LOG.debug(f"Parsing PDFs from '{pdfs_path}' to '{output_dir}' using template '{excel_template}'...")
+    try: 
+        LOG.debug(f"Parsing PDFs from '{pdfs_path}' to '{output_dir}' using template '{excel_template}'...")
     
-    df: Dict[PdfType, pandas.DataFrame] = pandas.read_excel(DEFAULT_EXCEL_TEMPLATE, header=3, index_col=[0], nrows=0, sheet_name=[PdfType.PREVENTIVE, PdfType.MV])
-    LOG.debug(f'\n{df[PdfType.PREVENTIVE]}')
-    LOG.debug(f'\n{df[PdfType.MV]}')
-    
-    for f in [os.listdir(pdfs_path)[0]]:
-        if f.endswith('.pdf'):
-            parse_pdf(f'{pdfs_path}/{f}', output_dir, df)
-    pass
+        df: Dict[PdfType, pandas.DataFrame] = pandas.read_excel(DEFAULT_EXCEL_TEMPLATE, 
+                                                                header=3, 
+                                                                index_col=[0], 
+                                                                nrows=0, 
+                                                                sheet_name=[PdfType.PREVENTIVE, PdfType.MV])
+        
+        create_dir(output_dir, raise_error=True)
+        
+        for f in [os.listdir(pdfs_path)[0]]:
+            if f.endswith('.pdf'):
+                parse_pdf(f'{pdfs_path}/{f}', output_dir, df)
+    except OSError as e:
+        LOG.error(f'Error while creating output directory {output_dir}:\n {e}')
+        raise e
+    except Exception as e:
+        LOG.error(f'Error while parsing PDFs from {pdfs_path} to {output_dir}:\n {e}')
+        raise e
