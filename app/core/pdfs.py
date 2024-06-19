@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
+from math import inf, sqrt
+from operator import itemgetter, ne
 import re
 import os
 import json
@@ -11,19 +13,22 @@ from tempfile import TemporaryDirectory
 from typing import Any, AnyStr, Dict, Iterator, List, Sequence, Tuple
 
 # Third-Party Imports
+from numpy import isin
 import pandas
 from PIL import Image
 from matplotlib import patches, pyplot as plt
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
-from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, Rect
+from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, LTTextBoxHorizontal, LTTextLineHorizontal, LTTextGroup
 from pdf2image import convert_from_path
 
 os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
 
 # Local Imports
-from app.model.pdfs import PDFLayoutContainer, PDFLayoutElement, PDFLayoutLine
+from app.model.pdfs import ParseResult, ParseState, XYIntersect, PDFLayout, PDFLayoutContainer, PDFLayoutElement, PDFLayoutLine, XYCoord
+from app.utils.types import TypeUtils
 from app.utils.files import create_dir
+from app.utils.pdf import PDFUtils
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
@@ -38,9 +43,6 @@ class PdfType(StrEnum):
     UNKNOWN = 'Unknown'
     
     
-def _parse_preventive_pdf(pdf_pages: Sequence[PageObject], df: pandas.DataFrame) -> None:
-    pass
-
 def _parse_mv_pdf_page(current_number:str, current_measure: str, pdf_page: PageObject, idx: int, parse_result: Dict[AnyStr, Any], df: pandas.DataFrame) -> None:
     page_text: str = pdf_page.extract_text(extraction_mode='layout')
     page_lines: List[str] = [l for l in page_text.split('\n') if l and l.strip()]
@@ -161,6 +163,195 @@ def _parse_mv_pdf(pdf_pages: Iterator[PageObject], parse_result: Dict[AnyStr, An
         print(f'RET MEASURE {current_measure}\nRET NUMBER {current_number}')
         idx += 1
 
+def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result: ParseResult, pdf_form_fields: Dict[str, Any]) -> ParseResult:
+    text_els: List[LTTextContainer] = sorted([el for el in pdf_page if isinstance(el, LTTextContainer)], key=lambda e: (-e.bbox[1], e.bbox[0]))
+    
+    if pdf_page.pageid == 1:
+        # First page
+        el_iter: Iterator[LTTextContainer] = iter(text_els)
+        el: LTTextContainer = next(el_iter, None)
+        parse_result['YearAnnualService'] = el.get_text().strip()
+        
+        el = next(el_iter, None)
+        if el != None and el.get_text().strip().lower().startswith('code'):
+            parse_result['Code'] = next(el_iter, None).get_text().strip()
+        
+        el = next(el_iter, None)
+        if el != None and isinstance(el, LTTextBoxHorizontal):
+            vals_iter: LTTextLineHorizontal = iter(next(el_iter, None))
+            for sub in el:
+                parse_result[sub.get_text().strip()] = next(vals_iter).get_text().strip()
+    else:
+        # Either has headers or does not (page 2 example vs page 3)
+        parse_result['Tasks'] = parse_result.get('Tasks', {})
+        parse_tasks: Dict[str, Any] = parse_result['Tasks']
+       
+        page_headers: List[str]= ['td code', 'checkpoint', 'result', 'comment', 'mors case id', 'measurements', 'unit', 'min', 'max']
+        page_headers_avg_x: List[float] = [-1.0] * len(page_headers) 
+        rect_els: List[LTRect] = [el for el in pdf_page if isinstance(el, LTRect)]
+        text_els = []
+        for el in pdf_page:
+            if isinstance(el, LTTextContainer):
+                if el.get_text().strip().lower().startswith('tech:'):
+                    continue
+                
+                header_el: bool = False
+                text: str = el.get_text().strip().lower()
+                for i in range(len(page_headers)):
+                    if text.startswith(page_headers[i]):
+                        header_el = True
+                        page_headers_avg_x[i] = (el.bbox[0] + el.bbox[2]) / 2
+                        break
+                if header_el:
+                    continue
+                
+                text_els.append(el)
+        text_els = sorted(text_els, key=lambda e: (-e.bbox[1], e.bbox[0]))
+        el_iter: Iterator[LTComponent] = iter(text_els)
+        
+        # tmp_text_els = []
+        # curr_x0: float = 0
+        # curr_avg_y = float('inf')
+        # prev_y0: float = float('inf')
+        # for el in text_els:
+        #     x0: float = el.bbox[0]
+        #     avg_y: float = (el.bbox[1] + el.bbox[3]) / 2
+            
+        #     if curr_avg_y == float('inf'):
+        #         curr_avg_y: float = avg_y
+        #     if abs(curr_avg_y - avg_y) > 15:
+        #         curr_x0 = x0
+        #         curr_avg_y = avg_y
+        #     if x0 >= curr_x0:
+        #         curr_x0 = x0 
+                
+        #     if TypeUtils.is_iterable(el) and isinstance(el, LTTextContainer) and not isinstance(el, LTTextLineHorizontal):
+        #         print(el)
+                
+        #         for l in el:
+        #             avg_y: float = (l.bbox[1] + l.bbox[3]) / 2
+        #             if abs(curr_avg_y - avg_y) > 10:
+        #                 print('Should BE SEPARATE LINE')
+        #                 # Text line erroneously attached
+        #                 pass
+                    
+        
+        el: LTTextContainer = next(el_iter, None)
+        if el != None and page_headers_avg_x[0] > 0:
+            def parse_task(el: LTTextContainer, el_iter: Iterator[LTTextContainer]) -> None:
+                section: str = ''
+                task_code: str = ''
+                
+                container: LTRect | None | bool = True
+                while container:
+                    container = None
+                    for rect in rect_els:
+                        if PDFLayout.bbox_overlaps(PDFLayoutElement(el).bbox, PDFLayoutContainer(rect).bbox):
+                            container = rect
+                            break
+                    if container:
+                        bgcolor: Tuple[float, float, float] = container.non_stroking_color if isinstance(container.non_stroking_color, tuple) else (container.non_stroking_color, container.non_stroking_color, container.non_stroking_color)
+                        db: float = sqrt((0 - bgcolor[0])**2 + (0 - bgcolor[1])**2 + (1 - bgcolor[2])**2) # dist to blue
+                        dg: float = sqrt((0 - bgcolor[0])**2 + (1 - bgcolor[1])**2 + (0 - bgcolor[2])**2) # dist to blue
+                        if dg < db:
+                            # Green
+                            section += el.get_text().strip()
+                            state['task'] = section
+                            parse_tasks[section] = {
+                                'WTGSection': section, 
+                                'Elements': {}
+                            }
+                        else:
+                            # Blue
+                            section = section if section else state['task']
+                            task_code += el.get_text().strip()
+                            state['element'] = task_code
+                            parse_tasks[section]['Elements'][task_code] = {
+                                'TaskCode/Name': task_code, 
+                                'Elements': {}
+                            }
+                        el = next(el_iter, None)
+                        if el is None:
+                            return
+                
+                def element(el: LTTextContainer, el_iter: Iterator[LTTextContainer]) -> None:
+                    parser_elements: Dict[str, Any] = parse_tasks[section]['Elements'][task_code]['Elements']
+                    subelement_code = el.get_text().strip()
+                    split: List[str] =  subelement_code.split(' ', 1)
+                    subelement_code: str = split[0]
+                    subelement_desc: str = split[1] if len(split) > 1 else ''
+                    parser_elements[subelement_code] = {
+                        'TaskCode': subelement_code,
+                        'checkpoint': subelement_desc
+                    }
+                    current_element: Dict[str, Any] = parser_elements[subelement_code]
+                    state['subelement'] = subelement_code
+
+                    avg_y: float = (el.bbox[1] + el.bbox[3]) / 2
+                    
+                    def parse_elements(el: LTTextContainer, el_iter: Iterator[LTTextContainer]) -> None:
+                        if el is None:
+                            return
+                        
+                        el_y: float = (el.bbox[1] + el.bbox[3]) / 2
+                        el_x: float = (el.bbox[0] + el.bbox[2]) / 2
+                        if abs(avg_y - el_y) <= 10:
+                            for idx in range(len(page_headers)):
+                                if abs(page_headers_avg_x[idx] - el_x) <= 10:
+                                    break
+                            if abs(page_headers_avg_x[idx] - el_x) >= 10:
+                                idx = 1 # checkpoint
+                            current_element[page_headers[idx]] = el.get_text().strip()
+                            parse_elements(next(el_iter, None), el_iter)
+                        else:
+                            state['subelement'] = None
+                           
+                            container: LTRect | None = True
+                            while container:
+                                container = None
+                                for rect in rect_els:
+                                    if PDFLayout.bbox_overlaps(PDFLayoutElement(el).bbox, PDFLayoutContainer(rect).bbox):
+                                        parse_task(el, el_iter)
+                                        return
+                            element(el, el_iter)
+                    el = next(el_iter, None)
+                    if el is None:
+                        return
+                    parse_elements(el, el_iter)
+                    
+                element(el, el_iter)
+            
+            parse_task(el, el_iter)
+        else:
+            # no headers at top of page
+            section: str = el.get_text().strip()
+            state['task'] = section
+            parse_tasks[section] = {
+                'WTGSection': section, 
+                'Description': next(el_iter, None).get_text().strip(),
+                'Elements': {}
+            }
+            while (el := next(el_iter, None)) != None:
+                if el.get_text().strip().lower().startswith('max'):
+                    break
+            el = next(el_iter, None)
+            # TODO: Parse comments [Unknown where from] !!!
+    
+    return parse_result
+
+def _parse_preventive_pdf(pdf_pages: Iterator[LTPage], parse_result: ParseResult, pdf_form_fields: Dict[str, Any]) -> ParseResult:
+    LOG.debug(f'Parsing {PdfType.PREVENTIVE} PDF...')
+    
+    state: ParseState = {'measure': None, 'task': None}
+    while (pdf_page := next(pdf_pages, None)) != None:
+        # if pdf_page.pageid != 5:
+        #     continue
+        LOG.debug(f'Parsing page {pdf_page.pageid}...')
+        _parse_preventive_pdf_page(pdf_page, state, parse_result, pdf_form_fields)
+        if pdf_page.pageid == 5:
+            break
+    return parse_result
+
 def _resolve_pdf_type(first_page: PageObject) -> PdfType:
     page_lines: str = first_page.extract_text(extraction_mode='layout').split('\n')
     first_line: str = page_lines[0].strip().lower()
@@ -176,27 +367,35 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
     
     pdf_reader = PdfReader(pdf_path)
     pdf_pages: List[PageObject] = pdf_reader.pages
-    parse_result: Dict[AnyStr, Any] = dict()
+    parse_result: ParseResult = {}
     parse_result['Type'] = _resolve_pdf_type(pdf_pages[0])
     
-    # _highlight_bounding_boxes_pdf(pdf_path, out_dir)
-    pdf_pages = extract_pages(pdf_path)
-    _sort_top_left_page_elements(next(pdf_pages))
-    _sort_top_left_page_elements(next(pdf_pages))
+    pdf_pages_iter: Iterator[LTPage] = extract_pages(pdf_path)
+    # _highlight_bbox_pdf(pdf_path, out_dir, dpi = 200)
+    # _sort_pdf_page_elements(next(pdf_pages_iter))
+    # _sort_pdf_page_elements(next(pdf_pages_iter))
+    # _sort_pdf_page_elements(next(pdf_pages_iter))
     
-    # LOG.debug(f'PDF type: {parse_result['Type']}')
-    return parse_result
     match parse_result['Type']:
         case PdfType.PREVENTIVE:
-            LOG.debug(f'Parsing {PdfType.PREVENTIVE} PDF...')
-            # return _parse_preventive_pdf(pdf_pages, df[PdfType.PREVENTIVE])
-            return None
+            LOG.debug(f'PDF type: {parse_result['Type']}')
+            pdf_form_fields: Dict[str, Any] = PDFUtils.load_form(pdf_path)
+            parse_result['WTG'] = str(pdf_form_fields['Dropdun'])
+            parse_result['OperationalHours'] = str(pdf_form_fields['OPERATIONNAL HOURS'])
+            parse_result['ShutdownHours'] = str(pdf_form_fields['SHUTDOWN HOURS'])
+            parse_result['FinishDate'] = str(pdf_form_fields['FINISH Date'])
+            parse_result['BeginningDate'] = str(pdf_form_fields['BEGINNING Date'])
+            parse_result['Signature'] = str(pdf_form_fields['Signature5']).strip() != None
+            _parse_preventive_pdf(pdf_pages_iter, parse_result, pdf_form_fields)
+            
+            LOG.debug(f'{json.dumps(parse_result, indent=2, default=str)}')         
+            return parse_result
         case PdfType.MV:
             LOG.debug(f'Parsing {PdfType.MV} PDF...')
+           
             _parse_mv_pdf(iter(pdf_pages), parse_result, df[PdfType.MV])
             
-            os.makedirs(f'{out_dir}', exist_ok=True)
-            
+            LOG.debug(f'PDF type: {parse_result['Type']}')
             print(df[PdfType.MV].columns)
             
             for task in parse_result['Tasks']:
@@ -221,12 +420,12 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
                     
                     for m in parse_result['Tasks'][task]['Elements'][e]['Measures']:
                         df[PdfType.MV].loc[-1] = [
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
+                            parse_result['WTG'],
+                            parse_result['ChecklistName'],
+                            parse_result['RevisionDate'],
+                            parse_result['OrderNumber'],
+                            parse_result['ApprovalDate'],
+                            parse_result['Tasks'][task]['WTGSection'],
                             m,
                             None,
                             parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Value'],
@@ -246,28 +445,27 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
             LOG.debug(f'Unknown PDF type')
             raise PdfParseException(f'Unknown PDF type for {pdf_path}')
 
-def _sort_top_left_page_elements(page: LTPage) -> PDFLayoutElement:
+def _sort_pdf_page_elements(page: LTPage) -> PDFLayoutElement:
     root = PDFLayoutContainer(page)
     components: List[LTComponent] = sorted(page, key=lambda e: (e.bbox[1], -e.bbox[0]))
     components_stack = deque(components, maxlen=len(components))
     lines: List[LTLine] = []
     seen = 0
     
+    # Postpone the processing of the components that are not lines or rectangles to the end
+    # of the stack as to extract the decoupled lines and lines from rectangles to restructure the layout tree
     while seen < len(components) and len(components_stack) > 0:
         component: LTComponent = components_stack.popleft()
         seen += 1
         
-        if isinstance(component, (LTTextContainer)):
+        if not isinstance(component, (LTRect, LTLine)):
+            # el = PDFLayoutContainer(component)
+            # root.child(el)
             components_stack.append(component)
             continue
         
-        if isinstance(component, (LTImage, LTFigure)):
-            root.child(PDFLayoutElement(component))
-            continue
-        
         if isinstance(component, (LTRect)):
-            el = PDFLayoutContainer(component)
-            # root.child(el)
+            # Destructure the rectangle into 4 lines and add them to the lines stack
             x0, y0, x1, y1 = component.bbox
             lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x1, y0))))
             lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x0, y1))))
@@ -276,22 +474,69 @@ def _sort_top_left_page_elements(page: LTPage) -> PDFLayoutElement:
             continue
         
         if isinstance(component, (LTLine)):
+            # Simple line 
             el0 = PDFLayoutLine(component)
             lines.append(el0)
             continue
     
-    lines_stack = deque(sorted(lines, key=lambda e: (e.bbox['x0'], e.bbox['y0'])), maxlen=len(lines))
-    print(lines_stack)
+    # Sort the lines by their y0 and x0 coordinates to process them in order computing the intersections
+    # between them to get the new anchor points for new rectangles 
+    lines_stack = deque(sorted(lines, key=lambda e: (e.bbox['y0'], e.bbox['x0'])))
+    intercepts: List[XYIntersect] = []
     while len(lines_stack) > 0:
-        lines_stack.popleft()
+        # Intercept is symmetric so only one of the two lines is needed to compute the intersection
+        line: LTLine = lines_stack.popleft()
+        for l in lines_stack:
+            intercept: XYCoord | None = PDFLayout.intersection(line, l)
+            
+            if intercept is not None:
+                intercepts.append((intercept, (line, l)))
+    
+    # Split the intercepts list into a list of lists representing a 2D matrix of the intercepts
+    # where each row groups all intercepts that share the same y0 coordinate, and sort the intercepts
+    # by their x0 coordinate to process them in order to reconstruct the layout tree
+    intercepts = sorted(intercepts, key=lambda e: (e[0][1], e[0][0]))
+    intercepts_2d: List[List[XYIntersect]] = []
+    for intercept in intercepts:
+        if len(intercepts_2d) == 0:
+            intercepts_2d.append([intercept])
+        elif intercept[0][1] == intercepts_2d[-1][0][0][1]:
+            intercepts_2d[-1].append(intercept)
+        else:
+            intercepts_2d.append([intercept])
+    
+    
+    print('[\n')
+    for i in intercepts_2d:
+        print('\t\t[\n')
+        for j in i:
+            print(f'\t\t\t{j}')
+        print('\t\t]\n')
+    print(']\n')
         
+    # Corollary 0:
+    # Given a list of intersections of lines, the list can be split into a list of lists where each list 
+    # groups all intersections that share the same y0 coordinate and the list is sorted by the x0 coordinate.
+    # This structure can be used to construct rectangles from the intersections of the lines.
+    
+    # Corollary 1:
+    # Given an intersection point P(x, y) from this list, it can only be part of a single rectangle.
+    
+    # Corollary 2:
+    # Given an intersection point P(x, y) from this list and the 2 lines, L1(x0_l1, y0_l1, x1_l1, y1_l1) and L2(x0_l2, y0_l2, x1_l2, y1_l2), 
+    # that intersect at P,
+    
+    # print(sorted(intercepts, key=lambda e: (e[0][1], e[0][0]))) 
+    print(len(intercepts)) 
+    
     # LOG.debug(f'Parsed PDF page layout:\n {root}')
     # LOG.debug(f'Parsed PDF page children count: {len(root.children())}')
     # LOG.debug(f'Visited page {page.pageid} components count: {seen}')
     # LOG.debug(f'Aggregatted decoupled lines:\n {lines}')
+    
     return root
 
-def _highlight_bounding_boxes_pdf(pdf_path: str, out_dir: str, dpi: int = 500) -> None:
+def _highlight_bbox_pdf(pdf_path: str, out_dir: str, *, dpi: int = 500) -> None:
     try:
         pdf_pages_iter: Iterator[LTPage] = extract_pages(pdf_path)
         
@@ -301,18 +546,37 @@ def _highlight_bounding_boxes_pdf(pdf_path: str, out_dir: str, dpi: int = 500) -
                                                                             output_folder=temp_dir, 
                                                                             paths_only=True, 
                                                                             thread_count=4))
-            while pdf_page := next(pdf_pages_iter, None) != None:
-                _highlight_bounding_boxes_pdf_page(next(pdf_page_img_paths_iter), pdf_page)
+            while (pdf_page := next(pdf_pages_iter, None)) != None:
+                _highlight_bbox_pdf_page(next(pdf_page_img_paths_iter), pdf_page, out_dir)
+    except Exception as e:
+        LOG.error(f'Error while highlighting bounding boxes for pdf {pdf_path}:\n {e}')
+        raise e
+    finally:
+        plt.close('all')
+        
+def _highlight_bbox_pdf_page(pdf_path: str, pdf_page: LTPage, out_dir: str, dpi: int = 500) -> None:
+    try:
+        page_number: int = pdf_page.pageid
+        
+        with TemporaryDirectory() as temp_dir:
+            pdf_page_img_paths_iter: Iterator[str] = iter(convert_from_path(pdf_path, 
+                                                                            dpi=dpi, 
+                                                                            output_folder=temp_dir,
+                                                                            first_page=page_number,
+                                                                            last_page=page_number,
+                                                                            paths_only=True, 
+                                                                            thread_count=4))
+            _highlight_bbox(next(pdf_page_img_paths_iter), pdf_page, out_dir)
     except Exception as e:
         LOG.error(f'Error while highlighting bounding boxes for pdf {pdf_path}:\n {e}')
         raise e
     finally:
         plt.close('all')
 
-def _highlight_bounding_boxes_pdf_page(pdf_page_img_path: str, 
-                                       pdf_page: LTPage,
-                                       out_dir: str,
-                                       dpi: int = 500) -> None:
+def _highlight_bbox(pdf_page_img_path: str, 
+                    pdf_page: LTPage,
+                    out_dir: str,
+                    dpi: int = 500) -> None:
     # https://stackoverflow.com/questions/68003007/how-to-extract-text-boxes-from-a-pdf-and-convert-them-to-image
     pdf_page_img: Image.Image = Image.open(pdf_page_img_path)
     plt.imshow(pdf_page_img)
@@ -363,7 +627,7 @@ def _highlight_bounding_boxes_pdf_page(pdf_page_img_path: str,
             )
         )
     plt.axis('off')
-    plt.savefig(f'out/{os.path.basename(pdf_page_img_path)}.png', dpi=dpi, bbox_inches='tight')
+    plt.savefig(f'{out_dir}/{os.path.basename(pdf_page_img_path)}.png', dpi=dpi, bbox_inches='tight')
     plt.cla()
     plt.clf()
     plt.close()
@@ -380,7 +644,7 @@ def parse_pdfs(pdfs_path: Sequence[str], output_dir: str, excel_template: str = 
         
         create_dir(output_dir, raise_error=True)
         
-        for f in [os.listdir(pdfs_path)[0]]:
+        for f in [os.listdir(pdfs_path)[2]]:
             if f.endswith('.pdf'):
                 parse_pdf(f'{pdfs_path}/{f}', output_dir, df)
     except OSError as e:

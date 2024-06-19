@@ -24,7 +24,12 @@
             "encoding": "utf8"
         }
     },
-    "loggers": {},
+    "loggers": {
+        "pdfminer": {
+            "level": "INFO",
+            "handlers": []
+        }
+    },
     "root": {
         "level": "DEBUG",
         "handlers": [

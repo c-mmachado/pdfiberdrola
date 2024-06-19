@@ -48,7 +48,7 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
       properties=settings(),
       epilog=False, 
       arguments=arguments)
-def main(*_: Tuple[Any], pdfs_path: Optional[str], output_dir: Optional[str]) -> None:
+def main(*, pdfs_path: Optional[str], output_dir: Optional[str]) -> None:
     LOG.debug(f'Running main application entry point...')
     LOG.debug(f'Application settings: {settings()}')
     LOG.debug(f'PDFs path: {pdfs_path}')
