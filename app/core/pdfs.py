@@ -1,34 +1,35 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from math import inf, sqrt
-from operator import itemgetter, ne
+
 import re
 import os
 import json
+import shutil
 import logging
+from math import sqrt
 from enum import StrEnum
-from collections import  deque
+from collections import deque
 from tempfile import TemporaryDirectory
 from typing import Any, AnyStr, Dict, Iterator, List, Sequence, Tuple
 
 # Third-Party Imports
-from numpy import isin
 import pandas
 from PIL import Image
 from matplotlib import patches, pyplot as plt
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
-from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, LTTextBoxHorizontal, LTTextLineHorizontal, LTTextGroup
+from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, \
+    LTTextBoxHorizontal, LTTextLineHorizontal
 from pdf2image import convert_from_path
 
 os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
 
 # Local Imports
 from app.model.pdfs import ParseResult, ParseState, XYIntersect, PDFLayout, PDFLayoutContainer, PDFLayoutElement, PDFLayoutLine, XYCoord
-from app.utils.types import TypeUtils
 from app.utils.files import create_dir
 from app.utils.pdf import PDFUtils
+from app.utils.types import TypeUtils
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
@@ -207,34 +208,70 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
                 
                 text_els.append(el)
         text_els = sorted(text_els, key=lambda e: (-e.bbox[1], e.bbox[0]))
+        
+        tmp_text_els = []
+        curr_x0: float = 0
+        curr_avg_y = float('inf')
+        prev_prev_y0: float = float('inf')
+        prev_y0: float = float('inf')
+        prev_y1: float = float('inf')
+        min_x0: float = float('inf')
+        for el in text_els:
+            split: bool = False
+            x0: float = el.bbox[0]
+            y1: float = el.bbox[3]
+            y0: float = el.bbox[1]
+            avg_y: float = (el.bbox[1] + el.bbox[3]) / 2
+            
+            if x0 < min_x0 + 35:
+                min_x0: float = x0
+            if curr_avg_y == float('inf'):
+                curr_avg_y: float = avg_y
+            if abs(curr_avg_y - avg_y) > 15 and x0 <= min_x0:
+                curr_x0 = x0
+                curr_avg_y = avg_y
+            elif abs(y1 - prev_y1) > 15 and y1 > prev_prev_y0:
+                split: bool = True
+            if x0 >= curr_x0:
+                curr_x0 = x0 
+                
+            if split and TypeUtils.is_iterable(el) and isinstance(el, LTTextContainer) and not isinstance(el, LTTextLineHorizontal):
+                print(el)
+                
+                above: List[LTTextBoxHorizontal] = []
+                below: List[LTTextBoxHorizontal] = []
+                for l in el:
+                    l_y0: float = l.bbox[1]
+                    
+                    # TODO: Might be useful to calculate midpoint between prev_pev_y0 and prev_y1
+                    if l_y0 > prev_prev_y0 - 15:
+                        above.append(l)
+                    elif l_y0 < prev_y1 + 15:
+                        below.append(l)
+                        
+                above_el = LTTextBoxHorizontal()
+                [above_el.add(a) for a in above]
+                below_el = LTTextBoxHorizontal()
+                [below_el.add(a) for a in below]
+                print(above_el.get_text())
+                print(below_el.get_text())
+                print(above_el.bbox)
+                print(below_el.bbox)
+                tmp_text_els.append(above_el)
+                tmp_text_els.append(below_el)
+                continue
+            
+            prev_prev_y0 = prev_y0
+            prev_y0 = y0
+            prev_y1 = y1
+            tmp_text_els.append(el)
+             
+        text_els = tmp_text_els
+        text_els = sorted(text_els, key=lambda e: (-e.bbox[1], e.bbox[0]))       
         el_iter: Iterator[LTComponent] = iter(text_els)
         
-        # tmp_text_els = []
-        # curr_x0: float = 0
-        # curr_avg_y = float('inf')
-        # prev_y0: float = float('inf')
-        # for el in text_els:
-        #     x0: float = el.bbox[0]
-        #     avg_y: float = (el.bbox[1] + el.bbox[3]) / 2
-            
-        #     if curr_avg_y == float('inf'):
-        #         curr_avg_y: float = avg_y
-        #     if abs(curr_avg_y - avg_y) > 15:
-        #         curr_x0 = x0
-        #         curr_avg_y = avg_y
-        #     if x0 >= curr_x0:
-        #         curr_x0 = x0 
-                
-        #     if TypeUtils.is_iterable(el) and isinstance(el, LTTextContainer) and not isinstance(el, LTTextLineHorizontal):
-        #         print(el)
-                
-        #         for l in el:
-        #             avg_y: float = (l.bbox[1] + l.bbox[3]) / 2
-        #             if abs(curr_avg_y - avg_y) > 10:
-        #                 print('Should BE SEPARATE LINE')
-        #                 # Text line erroneously attached
-        #                 pass
-                    
+        for el in text_els:
+            print(el)
         
         el: LTTextContainer = next(el_iter, None)
         if el != None and page_headers_avg_x[0] > 0:
@@ -255,12 +292,13 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
                         dg: float = sqrt((0 - bgcolor[0])**2 + (1 - bgcolor[1])**2 + (0 - bgcolor[2])**2) # dist to blue
                         if dg < db:
                             # Green
-                            section += el.get_text().strip()
+                            section += (' ' if section else '') + el.get_text().strip()
                             state['task'] = section
                             parse_tasks[section] = {
                                 'WTGSection': section, 
                                 'Elements': {}
                             }
+                            
                         else:
                             # Blue
                             section = section if section else state['task']
@@ -273,6 +311,9 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
                         el = next(el_iter, None)
                         if el is None:
                             return
+                    else:
+                        section = section if section else state['task']
+                        task_code = task_code if task_code else state['element']
                 
                 def element(el: LTTextContainer, el_iter: Iterator[LTTextContainer]) -> None:
                     parser_elements: Dict[str, Any] = parse_tasks[section]['Elements'][task_code]['Elements']
@@ -344,12 +385,8 @@ def _parse_preventive_pdf(pdf_pages: Iterator[LTPage], parse_result: ParseResult
     
     state: ParseState = {'measure': None, 'task': None}
     while (pdf_page := next(pdf_pages, None)) != None:
-        # if pdf_page.pageid != 5:
-        #     continue
         LOG.debug(f'Parsing page {pdf_page.pageid}...')
         _parse_preventive_pdf_page(pdf_page, state, parse_result, pdf_form_fields)
-        if pdf_page.pageid == 5:
-            break
     return parse_result
 
 def _resolve_pdf_type(first_page: PageObject) -> PdfType:
@@ -362,7 +399,7 @@ def _resolve_pdf_type(first_page: PageObject) -> PdfType:
         return PdfType.PREVENTIVE
     return PdfType.UNKNOWN
 
-def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) -> pandas.DataFrame:
+def parse_pdf(pdf_path: str, excel_file_path: str, df: Dict[PdfType, pandas.DataFrame]) -> ParseResult:
     LOG.debug(f'Parsing PDF from {pdf_path}...')
     
     pdf_reader = PdfReader(pdf_path)
@@ -385,10 +422,53 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
             parse_result['ShutdownHours'] = str(pdf_form_fields['SHUTDOWN HOURS'])
             parse_result['FinishDate'] = str(pdf_form_fields['FINISH Date'])
             parse_result['BeginningDate'] = str(pdf_form_fields['BEGINNING Date'])
-            parse_result['Signature'] = str(pdf_form_fields['Signature5']).strip() != None
+            parse_result['Signature'] = pdf_form_fields['Signature5'] != None
+            parse_result['SignatureSGRE'] = pdf_form_fields['Signature1'] != None
             _parse_preventive_pdf(pdf_pages_iter, parse_result, pdf_form_fields)
             
-            LOG.debug(f'{json.dumps(parse_result, indent=2, default=str)}')         
+            LOG.debug(f'{json.dumps(parse_result, indent=2, default=str)}') 
+            
+            print(df[PdfType.PREVENTIVE].columns)
+            print(len(df[PdfType.PREVENTIVE].columns))
+            
+            for task in parse_result['Tasks']:
+                for task_el in parse_result['Tasks'][task]['Elements']:
+                    for el_el in parse_result['Tasks'][task]['Elements'][task_el]['Elements']:
+                        df[PdfType.PREVENTIVE].loc[-1] = [
+                                    str(parse_result['WTG']).replace('b', '').replace('\'', '').strip(),
+                                    str(parse_result['YearAnnualService']),
+                                    str(parse_result['BeginningDate']).replace('b', '').replace('\'', '').strip(),
+                                    str(parse_result['FinishDate']).replace('b', '').replace('\'', '').strip(),
+                                    str(parse_result['Code']),
+                                    str(parse_result['Rev.:']),
+                                    str(parse_result['Date']).replace('b', '').replace('\'', '').strip(),
+                                    'OK' if parse_result['SignatureSGRE'] else 'NO OK',
+                                    'OK' if parse_result['Signature'] else 'NO OK',
+                                    parse_result['Tasks'][task]['WTGSection'],
+                                    parse_result['Tasks'][task]['Elements'][task_el]['TaskCode/Name'],
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['TaskCode'],
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['checkpoint'],
+                                    'N/A',
+                                    'N/A',
+                                    'N/A',
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('measurement', None),
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('unit', None),
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('min', None),
+                                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('max', None),
+                                    None,
+                                    None,
+                                    None
+                                ]
+                        df[PdfType.PREVENTIVE].index = df[PdfType.PREVENTIVE].index + 1
+            
+            with pandas.ExcelWriter(excel_file_path, 'openpyxl', if_sheet_exists = 'overlay', mode='a') as writer:
+                df[PdfType.PREVENTIVE].to_excel(excel_writer = writer,
+                                                index=False, 
+                                                header=False,
+                                                startrow=4,
+                                                startcol=1,
+                                                sheet_name=PdfType.PREVENTIVE)
+            
             return parse_result
         case PdfType.MV:
             LOG.debug(f'Parsing {PdfType.MV} PDF...')
@@ -409,12 +489,12 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
                         parse_result['Tasks'][task]['WTGSection'],
                         parse_result['Tasks'][task]['Elements'][e]['Description'],
                         parse_result['Tasks'][task]['Elements'][e]['Remarks'],
-                        None,
-                        None,
+                        'N/A',
+                        'N/A',
                         parse_result['Tasks'][task]['Elements'][e]['Status'],
                         None,
                         None,
-                        None
+                        None,
                     ]
                     df[PdfType.MV].index = df[PdfType.MV].index + 1  
                     
@@ -427,19 +507,24 @@ def parse_pdf(pdf_path: str, out_dir: str, df: Dict[PdfType, pandas.DataFrame]) 
                             parse_result['ApprovalDate'],
                             parse_result['Tasks'][task]['WTGSection'],
                             m,
-                            None,
+                            'N/A',
                             parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Value'],
                             parse_result['Tasks'][task]['Elements'][e]['Measures'][m]['Unit'],
+                            'N/A',
                             None,
                             None,
                             None,
-                            None
                         ]
                         df[PdfType.MV].index = df[PdfType.MV].index + 1  
             
-            print(df[PdfType.MV].head())
+            with pandas.ExcelWriter(excel_file_path, 'openpyxl', if_sheet_exists = 'overlay', mode='a') as writer:
+                df[PdfType.MV].to_excel(excel_writer = writer,
+                                        index=False, 
+                                        header=False,
+                                        startrow=4,
+                                        startcol=1,
+                                        sheet_name=PdfType.MV)
             
-            df[PdfType.MV].to_excel(f'{out_dir}/output.xlsx', index=False, sheet_name='MV')
             return parse_result
         case _:
             LOG.debug(f'Unknown PDF type')
@@ -636,17 +721,31 @@ def parse_pdfs(pdfs_path: Sequence[str], output_dir: str, excel_template: str = 
     try: 
         LOG.debug(f"Parsing PDFs from '{pdfs_path}' to '{output_dir}' using template '{excel_template}'...")
     
-        df: Dict[PdfType, pandas.DataFrame] = pandas.read_excel(DEFAULT_EXCEL_TEMPLATE, 
-                                                                header=3, 
-                                                                index_col=[0], 
-                                                                nrows=0, 
-                                                                sheet_name=[PdfType.PREVENTIVE, PdfType.MV])
-        
         create_dir(output_dir, raise_error=True)
         
-        for f in [os.listdir(pdfs_path)[2]]:
-            if f.endswith('.pdf'):
-                parse_pdf(f'{pdfs_path}/{f}', output_dir, df)
+        print(os.listdir(pdfs_path))
+            
+        with TemporaryDirectory() as work_dir:
+            files: List[str] = os.listdir(pdfs_path)
+            for f in files:
+                try:
+                    if f.endswith('.pdf'):
+                        shutil.copyfile(DEFAULT_EXCEL_TEMPLATE, f'{work_dir}/{f}.xlsx')
+                        df: Dict[PdfType, pandas.DataFrame] = pandas.read_excel(f'{work_dir}/{f}.xlsx', 
+                                                                                header=3, 
+                                                                                index_col=[0], 
+                                                                                nrows=0, 
+                                                                                sheet_name=[PdfType.PREVENTIVE, PdfType.MV])
+                    
+                    
+                        parse_pdf(f'{pdfs_path}/{f}', f'{work_dir}/{f}.xlsx', df)
+                        shutil.copyfile(f'{work_dir}/{f}.xlsx', f'{output_dir}/{os.path.splitext(f)[0]}.xlsx')
+                except:
+                    LOG.error(f'Error while parsing PDF {f}:\n {e}')
+                    create_dir(f'{output_dir}/error', raise_error=False)
+                    shutil.copyfile(f'{pdfs_path}/{f}', f'{output_dir}/error/{f}')
+                    continue
+            
     except OSError as e:
         LOG.error(f'Error while creating output directory {output_dir}:\n {e}')
         raise e
