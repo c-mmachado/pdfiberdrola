@@ -127,8 +127,60 @@ def is_path(path: str) -> bool:
     else:
         return True
 
+def is_valid_dir(path: str) -> bool:
+    """Checks if a file path is a valid directory.
 
-def make_path(path: str, *args: Tuple[str]) -> str:
+    Attempts to verify that the given file path is a valid directory path in the
+    current OS and that it either exists or that it is creatable.
+
+    Parameters
+    ----------
+    path : str
+        the file path to check
+
+    Returns
+    -------
+    bool
+        whether the given file path is a valid directory
+    """
+
+    if not path or not path.strip():
+        return False
+    path = make_path(path)
+
+    try:
+        return is_path(path) and os.path.isdir(path)
+    except Exception:
+        return False
+
+def is_valid_file(path: str) -> bool:
+    """Checks if a file path is a valid file.
+
+    Attempts to verify that the given file path is a valid file path in the
+    current OS and that it exists.
+
+    Parameters
+    ----------
+    path : str
+        the file path to check
+
+    Returns
+    -------
+    bool
+        whether the given file path is a valid file
+    """
+
+    if not path or not path.strip():
+        return False
+    path = make_path(path)
+
+    try:
+        return is_path(path) and os.path.isfile(path)
+    except Exception:
+        return False
+
+
+def make_path(path: str, *args: str) -> str:
     """Creates a file separator standardized path.
 
     Creates a path string representing a file in the current OS file system with

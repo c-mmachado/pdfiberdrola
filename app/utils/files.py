@@ -8,7 +8,7 @@ from typing import AnyStr
 # Third-Party Imports
 
 # Local Imports
-from app.utils.paths import make_path
+from app.utils.paths import is_path, make_path
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def create_dir(path: AnyStr, raise_error: bool = False) -> bool:
 
     Raises
     ------
-    Exception
+    OSError
         when the directory creation process fails
     """
 
@@ -92,3 +92,27 @@ def create_file(path: str, raise_error: bool = False) -> bool:
             raise e
         LOG.error(f'Creation of file at {path} has failed', e)
     return False
+
+def is_pdf_file(path: str) -> bool:
+    """Checks if the file at the given path is a PDF file.
+
+    Parameters
+    ----------
+    file_path : str
+        the file path to check
+
+    Returns
+    -------
+    bool
+        whether the file is a PDF file
+    """
+
+    if not path or not path.strip():
+        return False
+    path = make_path(path)
+    
+    if not is_path(path):
+        return False
+    
+    with open(path, 'rb') as file:
+        return file.read(4) == b'%PDF'

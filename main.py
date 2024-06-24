@@ -4,7 +4,7 @@
 import os
 import sys
 import logging
-from typing import Any, AnyStr, Dict, Optional, Tuple
+from typing import AnyStr, Optional
 
 # Third-Party Imports
 
@@ -36,24 +36,31 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
                              help = 'Path to the PDFs to parse [default: %(default)s]')
     meta.parser.add_argument('-out',
                              '--output_dir',
-                             dest = 'output_dir',
+                             dest = 'out_dir',
                              type = str,
                              metavar = '<output_dir>',
                              action = 'store',
                              default = None,
                              help = 'Directory to save the parsed data to [default: %(default)s]')
+    meta.parser.add_argument('-s',
+                             '--split',
+                             dest = 'split',
+                             action = 'store_true',
+                             default = False,
+                             help = 'Whether to split the output excel file for each input pdf [default: %(default)s]')
 
 @entry_point(sys.argv)
 @meta(prog="main.py", 
       properties=settings(),
       epilog=False, 
       arguments=arguments)
-def main(*, pdfs_path: Optional[str], output_dir: Optional[str]) -> None:
+def main(*, pdfs_path: Optional[AnyStr], out_dir: Optional[AnyStr], split: bool = False) -> None:
     LOG.debug(f'Running main application entry point...')
     LOG.debug(f'Application settings: {settings()}')
     LOG.debug(f'PDFs path: {pdfs_path}')
-    LOG.debug(f'Output directory: {output_dir}')
-    parse_pdfs(pdfs_path, output_dir)
+    LOG.debug(f'Output directory: {out_dir}')
+    LOG.debug(f'Split: {split}')
+    parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)
 
 
 if __name__ == "__main__":
