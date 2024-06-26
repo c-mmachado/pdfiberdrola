@@ -43,6 +43,13 @@ class BBox(TypedDict):
 @final
 class PDFUtils(Final):
     @staticmethod
+    def page_count(pdf_path: str) -> int:
+        with open(pdf_path, 'rb') as file:
+            parser = PDFParser(file)
+            doc = PDFDocument(parser)
+            return resolve1(doc.catalog['Pages'])['Count']
+    
+    @staticmethod
     def load_form_fields(pdf_path: str, *, field_patterns: Sequence[AnyStr] = [r'.*']) -> Dict[AnyStr, Any]:
         # See https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf
         # for more information on PDF form fields and their properties. Internal description of form fields

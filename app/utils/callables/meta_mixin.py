@@ -28,27 +28,35 @@ class SimpleCallableMetaInfo:
     Attributes
     ----------
     prog : str
-        the file name
-    name : AnyStr
-        the name
-    description : AnyStr
-        the description
+        the program main entry point name
+    name : str
+        the name of the program
+    description : str
+        the program description
     version : Version
-        the version
-    epilog : AnyStr
-        the epilog showing the license information
+        the program version
+    epilog : bool, optional
+        whether to include the license information in the help message, by default False
     parser : argparse.ArgumentParser
-        the `argparse.ArgumentParser` argument parser for the callable object
-        
+        an `argparse.ArgumentParser` object or a callable returning one for the wrapped callable object's argument resolution
+    
     Parameters
     ----------
     func : SimpleCallable
-        the callable object
-    parser : `Union[argparse.ArgumentParser, Callable[[CallableMetaInfo], argparse.ArgumentParser]]`
-        the `argparse.ArgumentParser` argument parser for the callable object, by default None
+        the callable object to be wrapped
+    prog : str
+        the program name
+    properties : app.config.AppSettings
+        the configuration settings for the application
+    parser : argparse.ArgumentParser | Callable[[], argparse.ArgumentParser], optional
+        an `argparse.ArgumentParser` object or a callable returning one for the wrapped callable object's argument resolution, by default None
+    arguments : Callable[[SimpleCallableMetaInfo], None], optional
+        a callable object intented to add arguments to the parser should it be necessary, by default None
+    epilog : bool, optional
+        whether to include the license information in the help message, by default False
     """
 
-    DEFAULT_DESC = '''
+    _DEFAULT_DESC = '''
 ${name} -- v${version}
 
 ${description}
@@ -69,9 +77,9 @@ Status: ${status}'''
                  arguments: Optional[Callable[['SimpleCallableMetaInfo'], None]] = None,
                  epilog: bool = False) -> Self:
         if not func:
-            raise TypeError('func argument cannot be undefined')
+            raise ValueError('func argument cannot be undefined')
         if not TypeUtils.is_callable(func):
-            raise TypeError('func argument must be a callable object')
+            raise ValueError('func argument must be a callable object')
 
         self.prog: str = prog
         self.name: str = properties.name if properties.name else ''

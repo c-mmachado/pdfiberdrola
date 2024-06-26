@@ -36,3 +36,6 @@ class AppSettings(BaseSettings):
             with open(self.license, 'r') as f:
                 self.license = f.read()
                 return self.license
+            
+    excel_template: Annotated[Optional[str], Field('templates/excel_template.xlsx', min_length = 1)]
+    no_gui: Annotated[Optional[bool], Field(False)]

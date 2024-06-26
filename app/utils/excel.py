@@ -2,7 +2,7 @@
 
 # Python Imports
 import logging
-from typing import Literal, Sequence, Tuple, final
+from typing import Dict, Literal, Sequence, Tuple, final
 
 # Third-Party Imports
 import pandas
@@ -38,7 +38,7 @@ class ExcelUtils(Final):
     def read_excel(*, 
                    file_path: str, 
                    sheet_names: Sequence[str],
-                   start_cell: ExcelCell = (0, 0)) -> pandas.DataFrame:
+                   start_cell: ExcelCell = (0, 0)) -> Dict[str, pandas.DataFrame]:
         return pandas.read_excel(file_path, 
                                  header = start_cell[1] - 1, 
                                  index_col = [start_cell[0] - 1], 

@@ -48,20 +48,35 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
                              action = 'store_true',
                              default = False,
                              help = 'Whether to split the output excel file for each input pdf [default: %(default)s]')
+    meta.parser.add_argument('-xui',
+                             '--no-gui',
+                             dest = 'no_gui',
+                             action = 'store_true',
+                             default = False,
+                             help = 'Whether to split the output excel file for each input pdf [default: %(default)s]')
 
 @entry_point(sys.argv)
 @meta(prog="main.py", 
       properties=settings(),
       epilog=False, 
       arguments=arguments)
-def main(*, pdfs_path: Optional[AnyStr], out_dir: Optional[AnyStr], split: bool = False) -> None:
+def main(*, 
+         pdfs_path: Optional[AnyStr], 
+         out_dir: Optional[AnyStr], 
+         split: bool = False,
+         no_gui: bool = False) -> None:
     LOG.debug(f'Running main application entry point...')
     LOG.debug(f'Application settings: {settings()}')
     LOG.debug(f'PDFs path: {pdfs_path}')
     LOG.debug(f'Output directory: {out_dir}')
     LOG.debug(f'Split: {split}')
-    parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)
-
+    LOG.debug(f'No GUI: {no_gui}')
+    
+    if no_gui:
+        [LOG.debug(f'{i}, {p}') for i, p, _ in parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)]
+    else:
+        from app.gui.window import Window
+        Window().run()
 
 if __name__ == "__main__":
     main()

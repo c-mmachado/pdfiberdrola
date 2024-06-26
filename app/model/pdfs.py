@@ -1,28 +1,20 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from enum import StrEnum
-from typing import Any, AnyStr, Dict, Iterator, List, Self, TypedDict
+import logging
+from typing import Iterator, List, Self
 
 # Third-Party Imports
-from pdfminer.layout import LTPage, LTComponent
+from pdfminer.layout import LTComponent
 from pdfminer.utils import bbox2str
 
 # Local Imports
 from app.utils.format import JsonFormatMixin
-from app.utils.pdfs import BBox, LineSegment, PDFException, PDFLayoutUtils
+from app.utils.pdfs import BBox, LineSegment, PDFLayoutUtils
 
 # Constants
-ParseResult = Dict[AnyStr, Any]
+LOG: logging.Logger = logging.getLogger(__name__)
 
-
-class PDFParseException(PDFException):
-    pass
-
-class PDFType(StrEnum):
-    PREVENTIVE = 'Preventive'
-    MV = 'MV'
-    UNKNOWN = 'Unknown'
 
 class PDFLayoutElement(JsonFormatMixin):
     def __init__(self, element: LTComponent) -> Self:
@@ -30,7 +22,7 @@ class PDFLayoutElement(JsonFormatMixin):
         self.bbox: BBox = PDFLayoutUtils.bbox(element)
         
 class PDFLayoutContainer(PDFLayoutElement):
-    def __init__(self, element: LTComponent) -> None:
+    def __init__(self, element: LTComponent) -> Self:
         super().__init__(element)
         self._children: List[PDFLayoutElement] = [] 
         
@@ -41,10 +33,10 @@ class PDFLayoutContainer(PDFLayoutElement):
     def children(self) -> List[PDFLayoutElement]:
         return self._children
     
-    def child(self, child: 'PDFLayoutContainer') -> None:
+    def add_child(self, child: 'PDFLayoutContainer') -> None:
         for i in range(0, len(self._children)):
             if PDFLayoutUtils.bbox_overlaps(self._children[i].bbox, child.bbox):
-                child.child(child)
+                child.add_child(child)
                 return
         self._children.append(child)  
 
@@ -67,16 +59,3 @@ class PDFLayoutLine(PDFLayoutElement):
         """
         return "<%s %s>" % (self.__class__.__name__, bbox2str(tuple([v for k, v in self.bbox.items() if k in ['x0', 'y0', 'x1', 'y1']])))
 
-class ParseState(TypedDict):
-    task: str
-    element: str
-    subelement: str
-    block_num: int
-    line_num: int
-
-class PDFLayoutParser(object):
-    def __init__(self, page: LTPage) -> Self:
-        self._root: PDFLayoutContainer = PDFLayoutContainer(page)
-
-    def parse(self) -> PDFLayoutContainer:
-        pass

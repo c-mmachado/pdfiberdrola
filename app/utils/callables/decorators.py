@@ -24,8 +24,8 @@ def meta(*,
         @functools.wraps(func)
         def decorate() -> SimpleCallableMetaInfoMixin:
             func.__meta__ = SimpleCallableMetaInfo(func,
-                                                   prog=prog,
-                                                   properties=properties,
+                                                   prog = prog,
+                                                   properties = properties,
                                                    epilog = epilog,
                                                    parser = parser,
                                                    arguments = arguments)
