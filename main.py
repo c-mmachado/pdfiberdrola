@@ -27,7 +27,7 @@ del _file
 
 def arguments(meta: SimpleCallableMetaInfo) -> None:
     meta.parser.add_argument('-pdfs',
-                             '--pdfs_path',
+                             '--pdfs-path',
                              dest = 'pdfs_path',
                              type = str,
                              metavar = '<pdfs_path>',
@@ -35,7 +35,7 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
                              default = None,
                              help = 'Path to the PDFs to parse [default: %(default)s]')
     meta.parser.add_argument('-out',
-                             '--output_dir',
+                             '--output-dir',
                              dest = 'out_dir',
                              type = str,
                              metavar = '<output_dir>',
