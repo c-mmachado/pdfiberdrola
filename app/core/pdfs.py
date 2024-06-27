@@ -180,11 +180,11 @@ def parse_pdf_gen(*,
         LOG.debug(f'Writing parsed result to Excel template \'{out_path}\'...')
         with pandas.ExcelWriter(out_path, 'openpyxl', if_sheet_exists = 'overlay', mode = 'a') as writer:
             df[parse_result['Type']].to_excel(excel_writer = writer,
-                                                index = False, 
-                                                header = False,
-                                                startrow = 4,
-                                                startcol = 1,
-                                                sheet_name = parse_result['Type'])
+                                              index = False, 
+                                              header = False,
+                                              startrow = 4,
+                                              startcol = 1,
+                                              sheet_name = parse_result['Type'])
         LOG.debug(f'Parsed result written to Excel template \'{out_path}\'')
         
         yield (page_num, page_count, parse_result)
@@ -203,8 +203,11 @@ def resolve_file_output(file_path: AnyStr, out_dir: AnyStr, excel_template: AnyS
         out_file: str = make_path(f'{out_dir}/output.xlsx')
         LOG.debug(f'No split option detected. Copying Excel template to \'{out_file}\'...')
         
-        LOG.debug(f'Copying Excel template to \'{out_file}\'...')
-        shutil.copyfile(excel_template, out_file)
+        if not is_valid_file(excel_template):
+            LOG.debug(f'Copying Excel template to \'{out_file}\'...')
+            shutil.copyfile(excel_template, out_file)
+        else:
+            LOG.debug(f'Excel template \'{excel_template}\' already exists. Using it as output file...')
         excel_template_path = out_file    
         LOG.debug(f'Excel template copied to \'{excel_template_path}\'')
     else:
