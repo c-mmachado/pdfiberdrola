@@ -197,13 +197,17 @@ def parse_pdf_gen(*,
         yield e
     
     
-def resolve_file_output(file_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, split: bool = False) -> AnyStr:
+def resolve_file_output(file_path: AnyStr, 
+                        out_dir: AnyStr, 
+                        excel_template: AnyStr, 
+                        split: bool = False, 
+                        overwrite: bool = True) -> AnyStr:
     excel_template_path: str
     if not split:
         out_file: str = make_path(f'{out_dir}/output.xlsx')
         LOG.debug(f'No split option detected. Copying Excel template to \'{out_file}\'...')
         
-        if not is_valid_file(excel_template):
+        if not is_valid_file(excel_template) or overwrite:
             LOG.debug(f'Copying Excel template to \'{out_file}\'...')
             shutil.copyfile(excel_template, out_file)
         else:
@@ -224,16 +228,20 @@ def resolve_file_output(file_path: AnyStr, out_dir: AnyStr, excel_template: AnyS
         excel_template_path = out_file
         LOG.debug(f'Excel template copied to \'{excel_template_path}\'')
     return excel_template_path
-    
-def resolve_files(pdfs_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, split: bool = False) -> Generator[Tuple[str, str], None, None]:
-    files: Generator[Tuple[str, str]]
+
+
+def resolve_files(pdfs_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, split: bool = False) -> Generator[Tuple[str, str], bool, None]:
+    files: Generator[Tuple[str, str], bool]
     if is_valid_dir(pdfs_path):
         LOG.debug(f'Path \'{pdfs_path}\' is a valid directory')
         files = Path(pdfs_path).rglob('*.pdf')
     elif is_valid_file(pdfs_path):
         LOG.debug(f'Path \'{pdfs_path}\' is a valid file')
         files = (f for f in [make_path(pdfs_path)])
-    return ((f, resolve_file_output(f, out_dir, excel_template, split)) for f in files)
+    
+    for f in files:
+        overwrite: bool = yield
+        yield (f, resolve_file_output(f, out_dir, excel_template, split, overwrite))
     
 def setup_output(out_dir: str) -> None:
     try: 
@@ -254,16 +262,23 @@ def parse_pdfs(*,
     setup_output(out_dir)
 
     try:
-        files: Generator[Tuple[str, str]] = resolve_files(pdfs_path, out_dir, excel_template, split)
+        files: Generator[Tuple[str, str], bool] = resolve_files(pdfs_path, out_dir, excel_template, split)
         
         LOG.debug(f'Reading Excel template from \'{excel_template}\'...')
         df: Dict[str, pandas.DataFrame] = ExcelUtils.read_excel(file_path = excel_template, 
                                                                 sheet_names = [PDFType.PREVENTIVE, PDFType.MV], 
                                                                 start_cell = (2, 4))
         LOG.debug(f'Excel template read from \'{excel_template}\'')
-            
-        for f, o in files:
-            yield from parse_pdf_gen(pdf_path = f, out_dir = out_dir, out_path = o, df = df)
+        
+        idx = 0
+        while True:
+            try:
+                next(files)
+                f, o = files.send(True if idx == 0 else False)
+                idx += 1
+                yield from parse_pdf_gen(pdf_path = f, out_dir = out_dir, out_path = o, df = df)
+            except StopIteration as e:
+                break
     except Exception as e:
         LOG.error(f'Unexcepted exception while parsing PDFs from {pdfs_path} to {out_dir}:\n {e}')
         yield e

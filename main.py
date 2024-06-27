@@ -73,7 +73,7 @@ def main(*,
     LOG.debug(f'No GUI: {no_gui}')
     
     if no_gui:
-        [LOG.debug(f'{i}, {p}') for i, p, _ in parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)]
+        [_ for _ in parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)]
     else:
         from app.gui.window import Window
         Window().run()
