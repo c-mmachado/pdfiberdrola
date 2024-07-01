@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
+import re
 import json
 import logging
 from math import sqrt
-import re
 from typing import Any, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
-from numpy import block
 import pandas
 from pdfminer.layout import LTComponent, LTPage, LTTextContainer, LTTextBoxHorizontal, LTTextLineHorizontal, LTRect
 
@@ -201,7 +200,7 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
                     
                     parser_elements[subelement_code]['Status'] = status_value if status_value else 'N/A'
                     parser_elements[subelement_code]['MORS'] = mors_value if mors_value else 'N/A'
-                    parser_elements[subelement_code]['Measurement'] = re.sub(r'[^0-9.,]', '', measurement_value) if measurement_value else 'N/A'
+                    parser_elements[subelement_code]['Measurement'] = measurement_value if measurement_value else 'N/A'
                     parser_elements[subelement_code]['Comment'] = comment_value if comment_value else 'N/A'
                         
                     state['line_num'] = state['line_num'] + 1
