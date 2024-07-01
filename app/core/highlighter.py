@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-import logging
 import os
+import logging
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from typing import Iterator, List, Tuple
 
 # Third-Party Imports
-from matplotlib import patches, pyplot as plt
 import numpy
-from pdf2image import convert_from_path
 from PIL import Image
+from pdf2image import convert_from_path
+from matplotlib import patches, pyplot as plt
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTLine, LTFigure, LTImage, LTCurve
 

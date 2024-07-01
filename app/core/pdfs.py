@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from cmath import rect
-import math
 import os
-import json
 import shutil
 import logging
 from pathlib import Path
 from collections import deque
-from turtle import right
-from typing import Any, AnyStr, Dict, Generator, Iterator, List, Tuple
+from typing import AnyStr, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
 import pandas
@@ -18,8 +14,7 @@ from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, LTTextBoxHorizontal, LTTextLineHorizontal
 
-from app.core.highlighter import PDFBBoxHighlighter
-os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
+# os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
 
 # Local Imports
 from app.config import settings
@@ -29,7 +24,7 @@ from app.model.pdfs import PDFLayoutElement, PDFLayoutLine, PDFLayoutContainer, 
 from app.model.parser import PDFParseException, PDFType, ParseResult
 from app.utils.paths import is_valid_dir, is_valid_file, make_path, remove_extension
 from app.utils.files import create_dir, is_pdf_file
-from app.utils.pdfs import LineSegment, PDFLayoutUtils, PDFUtils, XYCoord, XYIntersect
+from app.utils.pdfs import PDFLayoutUtils, PDFUtils, XYCoord, XYIntersect
 from app.utils.excel import ExcelCell, ExcelUtils
 
 # Constants
