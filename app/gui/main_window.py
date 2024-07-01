@@ -1,4 +1,4 @@
-# Form implementation generated from reading ui file 'D:\Projects\cmm\iberdrola\pdfiberdrola\scripts\..\templates\ui\main_window.ui'
+# Form implementation generated from reading ui file 'D:\Projects\cmm\iberdrola\pdfiberdrola\scripts\..\resources\main_window.ui'
 #
 # Created by: PyQt6 UI code generator 6.7.0
 #
@@ -19,6 +19,9 @@ class Ui_MainWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
         MainWindow.setSizePolicy(sizePolicy)
+        MainWindow.setIconSize(QtCore.QSize(170, 30))
+        MainWindow.setDocumentMode(False)
+        MainWindow.setUnifiedTitleAndToolBarOnMac(False)
         self.centralwidget = QtWidgets.QWidget(parent=MainWindow)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Preferred)
         sizePolicy.setHorizontalStretch(0)
@@ -36,7 +39,7 @@ class Ui_MainWindow(object):
         self.progressBar = QtWidgets.QProgressBar(parent=self.centralwidget)
         self.progressBar.setProperty("value", 0)
         self.progressBar.setObjectName("progressBar")
-        self.gridLayout.addWidget(self.progressBar, 6, 0, 1, 1)
+        self.gridLayout.addWidget(self.progressBar, 7, 0, 1, 1)
         self.horizontalLayout = QtWidgets.QHBoxLayout()
         self.horizontalLayout.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetDefaultConstraint)
         self.horizontalLayout.setContentsMargins(0, -1, -1, -1)
@@ -122,6 +125,9 @@ class Ui_MainWindow(object):
         self.label_3.setMaximumSize(QtCore.QSize(905, 16777215))
         self.label_3.setObjectName("label_3")
         self.horizontalLayout_3.addWidget(self.label_3)
+        self.checkBox = QtWidgets.QCheckBox(parent=self.centralwidget)
+        self.checkBox.setObjectName("checkBox")
+        self.horizontalLayout_3.addWidget(self.checkBox)
         self.pushButton_3 = QtWidgets.QPushButton(parent=self.centralwidget)
         self.pushButton_3.setEnabled(False)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -134,6 +140,10 @@ class Ui_MainWindow(object):
         spacerItem2 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
         self.horizontalLayout_3.addItem(spacerItem2)
         self.gridLayout.addLayout(self.horizontalLayout_3, 3, 0, 1, 1)
+        self.label_4 = QtWidgets.QLabel(parent=self.centralwidget)
+        self.label_4.setText("")
+        self.label_4.setObjectName("label_4")
+        self.gridLayout.addWidget(self.label_4, 6, 0, 1, 1)
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -144,10 +154,11 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "Inspectrio"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "Inspetrio - Informes de Inspección"))
         self.label.setText(_translate("MainWindow", "Archivo/Carpeta"))
         self.pushButton.setText(_translate("MainWindow", "Buscar"))
         self.label_2.setText(_translate("MainWindow", "Carpeta Destino"))
         self.pushButton_2.setText(_translate("MainWindow", "Buscar"))
         self.label_3.setText(_translate("MainWindow", "Archivos a Processar"))
+        self.checkBox.setText(_translate("MainWindow", "Separar"))
         self.pushButton_3.setText(_translate("MainWindow", "Processar"))

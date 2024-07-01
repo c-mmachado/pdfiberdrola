@@ -4,9 +4,11 @@
 import json
 import logging
 from math import sqrt
+import re
 from typing import Any, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
+from numpy import block
 import pandas
 from pdfminer.layout import LTComponent, LTPage, LTTextContainer, LTTextBoxHorizontal, LTTextLineHorizontal, LTRect
 
@@ -20,7 +22,7 @@ from app.utils.types import TypeUtils
 LOG: logging.Logger = logging.getLogger(__name__)
 
 
-def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result: ParseResult, pdf_form_fields: Dict[str, Any]) -> ParseResult:
+def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result: ParseResult, pdf_form_fields: Dict[str, Any], pdf_form_fields_raw: List[Any]) -> ParseResult:
     text_els: List[LTTextContainer] = sorted([el for el in pdf_page if isinstance(el, LTTextContainer)], key=lambda e: (-e.bbox[1], e.bbox[0]))
     
     if pdf_page.pageid == 1:
@@ -199,7 +201,7 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
                     
                     parser_elements[subelement_code]['Status'] = status_value if status_value else 'N/A'
                     parser_elements[subelement_code]['MORS'] = mors_value if mors_value else 'N/A'
-                    parser_elements[subelement_code]['Measurement'] = measurement_value if measurement_value else 'N/A'
+                    parser_elements[subelement_code]['Measurement'] = re.sub(r'[^0-9.,]', '', measurement_value) if measurement_value else 'N/A'
                     parser_elements[subelement_code]['Comment'] = comment_value if comment_value else 'N/A'
                         
                     state['line_num'] = state['line_num'] + 1
@@ -255,75 +257,115 @@ def _parse_preventive_pdf_page(pdf_page: LTPage, state: ParseState, parse_result
             
             state['block_num'] = state['block_num'] + 1
             state['line_num'] = 1
+            
+            block_fields = []
+            for form_field in pdf_form_fields_raw:
+                if 'T' in form_field:
+                    if form_field['T'] == f'Comments-{state["block_num"]}' or form_field['T'] == f'MORS-{state["block_num"]}':
+                        block_fields.append(form_field)
+            
+            block_values = {}       
+            for block_field in block_fields:
+                if 'Kids' in block_field:
+                    block_values[block_field['T']] = {}
+                    
+                    for el in block_field['Kids']:
+                        if 'T' in el and 'V' in el:
+                            block_values[block_field['T']][int(el['T'])] = el['V']
+                    block_values[block_field['T']] = { k: v for k, v in sorted(block_values[block_field['T']].items(), key = lambda x: x[0]) }
+            
+            comments = block_values.get(f'Comments-{state["block_num"]}', {})
+            mors = block_values.get(f'MORS-{state["block_num"]}', {})
+            for i in comments: 
+                parse_tasks[section]['Elements'][f'Comments-{i}'] = {
+                    'TaskCode/Name': '', 
+                    'Elements': {
+                        f'SubComments-{i}': {
+                            'TaskCode': '',
+                            'checkpoint': comments[i],
+                            'Status': 'N/A',
+                            'Comment': '',
+                            'Measurement': '',
+                            'MORS': mors.get(i, 'N/A'),
+                        }
+                    }
+                }
+            t = 1
+                
             # TODO: Parse comments [Unknown where from] !!!
     
     return parse_result
 
 def parse_preventive_pdf(pdf_pages: Iterator[LTPage], parse_result: ParseResult, pdf_path: str, df: pandas.DataFrame) -> Generator[ParseResult, None, None]:
-    LOG.debug(f'Loading PDF form fields...')
-    pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(
-        pdf_path
-        # field_patterns = [
-        #     r'dropdun', 
-        #     r'.*\s+hours', 
-        #     r'(.*\s+)?date', 
-        #     r'signature\d+', 
-        #     r'rev.*', 
-        #     r'yearannualservice', 
-        #     r'code'
-        #     r'text\d+-comment-\d+',
-        #     r'text-comment-\d+-\d+',
-        #     r'text-measurement(?:-\d+){2}',
-        #     r'text-mors(?:-\d+){2}',
-        #     r'drop\d+-\d+',
-        # ]
-    )
-    # LOG.debug(f'Loaded PDF form fields: {json.dumps(pdf_form_fields, indent = 2, default = str)}')
-    LOG.debug(f'Loaded PDF form fields: {len(pdf_form_fields)}')
-    
-    parse_result['WTG'] = str(pdf_form_fields['Dropdun'])
-    parse_result['OperationalHours'] = str(pdf_form_fields['OPERATIONNAL HOURS'])
-    parse_result['ShutdownHours'] = str(pdf_form_fields['SHUTDOWN HOURS'])
-    parse_result['FinishDate'] = str(pdf_form_fields['FINISH Date'])
-    parse_result['BeginningDate'] = str(pdf_form_fields['BEGINNING Date'])
-    parse_result['Signature'] = pdf_form_fields['Signature5'] != None
-    parse_result['SignatureSGRE'] = pdf_form_fields['Signature1'] != None
-
-    LOG.debug(f'Parsing {PDFType.PREVENTIVE} PDF...')
-
-    state: ParseState = {'measure': None, 'task': None, 'block_num': 1, 'line_num': 1}
-    while (pdf_page := next(pdf_pages, None)) != None:
-        LOG.debug(f'Parsing page {pdf_page.pageid}...')
-        _parse_preventive_pdf_page(pdf_page, state, parse_result, pdf_form_fields)
-        yield parse_result
+    try:
+        LOG.debug(f'Loading PDF form fields...')
+        pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(
+            pdf_path
+            # field_patterns = [
+            #     r'dropdun', 
+            #     r'.*\s+hours', 
+            #     r'(.*\s+)?date', 
+            #     r'signature\d+', 
+            #     r'rev.*', 
+            #     r'yearannualservice', 
+            #     r'code'
+            #     r'text\d+-comment-\d+',
+            #     r'text-comment-\d+-\d+',
+            #     r'text-measurement(?:-\d+){2}',
+            #     r'text-mors(?:-\d+){2}',
+            #     r'drop\d+-\d+',
+            # ]
+        )
+        pdf_form_field_raw: List[Any] = PDFUtils.load_form_fields_raw(pdf_path)
+        LOG.debug(f'Loaded PDF form fields: {json.dumps(pdf_form_fields, indent = 2, default = str)}')
+        LOG.debug(f'Loaded PDF form fields: {len(pdf_form_fields)}')
         
-    for task in parse_result['Tasks']:
-        for task_el in parse_result['Tasks'][task]['Elements']:
-            for el_el in parse_result['Tasks'][task]['Elements'][task_el]['Elements']:
-                df.loc[-1] = [
-                    str(parse_result['WTG']),
-                    str(parse_result['YearAnnualService']),
-                    str(parse_result['BeginningDate']),
-                    str(parse_result['FinishDate']),
-                    str(parse_result['Code']),
-                    str(parse_result['Rev.:']),
-                    str(parse_result['Date']),
-                    'OK' if parse_result['SignatureSGRE'] else 'NO OK',
-                    'OK' if parse_result['Signature'] else 'NO OK',
-                    parse_result['Tasks'][task]['WTGSection'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['TaskCode/Name'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['TaskCode'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['checkpoint'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Status'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Comment'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['MORS'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Measurement'],
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('unit', None),
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('min', None),
-                    parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('max', None),
-                    None,
-                    None,
-                    None
-                ]
-                df.index = df.index + 1
-    # yield parse_result
+        parse_result['WTG'] = str(pdf_form_fields['Dropdun'])
+        parse_result['OperationalHours'] = str(pdf_form_fields['OPERATIONNAL HOURS'])
+        parse_result['ShutdownHours'] = str(pdf_form_fields['SHUTDOWN HOURS'])
+        parse_result['FinishDate'] = str(pdf_form_fields['FINISH Date'])
+        parse_result['BeginningDate'] = str(pdf_form_fields['BEGINNING Date'])
+        parse_result['Signature'] = pdf_form_fields['Signature5'] != None
+        parse_result['SignatureSGRE'] = pdf_form_fields['Signature1'] != None
+
+        LOG.debug(f'Parsing {PDFType.PREVENTIVE} PDF...')
+
+        state: ParseState = {'measure': None, 'task': None, 'block_num': 1, 'line_num': 1}
+        while (pdf_page := next(pdf_pages, None)) != None:
+            LOG.debug(f'Parsing page {pdf_page.pageid}...')
+            _parse_preventive_pdf_page(pdf_page, state, parse_result, pdf_form_fields, pdf_form_field_raw)
+            yield parse_result
+            
+        for task in parse_result['Tasks']:
+            for task_el in parse_result['Tasks'][task]['Elements']:
+                for el_el in parse_result['Tasks'][task]['Elements'][task_el]['Elements']:
+                    df.loc[-1] = [
+                        str(parse_result['WTG']),
+                        str(parse_result['YearAnnualService']),
+                        str(parse_result['BeginningDate']),
+                        str(parse_result['FinishDate']),
+                        str(parse_result['Code']),
+                        str(parse_result['Rev.:']),
+                        str(parse_result['Date']),
+                        'OK' if parse_result['SignatureSGRE'] else 'NO OK',
+                        'OK' if parse_result['Signature'] else 'NO OK',
+                        parse_result['Tasks'][task]['WTGSection'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['TaskCode/Name'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['TaskCode'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['checkpoint'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Status'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Comment'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['MORS'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el]['Measurement'],
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('unit', None),
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('min', None),
+                        parse_result['Tasks'][task]['Elements'][task_el]['Elements'][el_el].get('max', None),
+                        None,
+                        None,
+                        None
+                    ]
+                    df.index = df.index + 1
+        # yield parse_result
+    except Exception as e:
+        LOG.error(f'Error parsing {PDFType.PREVENTIVE} PDF:\n{e}')
+        yield e

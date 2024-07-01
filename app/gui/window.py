@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
+from os import error
+import os
 from pathlib import Path
-import sys
-from typing import Generator, List, Self, Tuple
+from typing import Any, Generator, List, Self, Tuple
 
 # Third-Party Imports
 from PyQt6 import QtWidgets
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem
-from PyQt6.QtCore import pyqtSlot
-from PyQt6.QtCore import QDir
+from PyQt6.QtGui import QIcon, QPalette
+from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem, QWidget, QHBoxLayout
+from PyQt6.QtCore import pyqtSlot, QDir, QSize, Qt
+from PyQt6 import QtGui, QtCore
 
 # Local Imports
+from app.config import settings
 from app.core.pdfs import parse_pdfs
 from app.gui.main_window import Ui_MainWindow
 from app.model.parser import ParseResult
@@ -20,13 +22,40 @@ from app.utils.paths import is_valid_dir
 from app.utils.pdfs import PDFUtils
 
 # Constants
-app = QApplication(sys.argv)
+app = QApplication([])
 
 class Window(QMainWindow, Ui_MainWindow):
+    class WindowTitleBar(QWidget):
+        def __init__(self, parent: QWidget) -> None:
+            super().__init__(parent)
+            self.setAutoFillBackground(True)
+            self.setBackgroundRole(QPalette.ColorRole.Highlight)
+            self.initial_pos = None
+            title_bar_layout = QHBoxLayout(self)
+            title_bar_layout.setContentsMargins(1, 1, 1, 1)
+            title_bar_layout.setSpacing(2)
+    
     def __init__(self) -> Self:
         super().__init__()
         self.setupUi(self)
+        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setWindowTitle(f'{settings().name} - v{settings().version}')
         self.setWindowIcon(QIcon('resources/iberdrola.png'))
+        
+        self.pgbStyleSheet = '''
+            QProgressBar {
+                border: 1px solid lightgrey;
+                border-radius: 2px;
+                text-align: right;
+                color: black;
+                margin-right: 30px;
+            }
+            QProgressBar::chunk {
+                background-color: #00AA00;
+            }
+        '''
+        self.label_4.setVisible(False)
+        self.progressBar.setStyleSheet(self.pgbStyleSheet)
         
     @pyqtSlot()
     def browse_input_files(self) -> None:
@@ -71,7 +100,10 @@ class Window(QMainWindow, Ui_MainWindow):
     
     @pyqtSlot()
     def process(self) -> None:
+        self.label_4.setVisible(False)
         self.pushButton_3.setEnabled(False)
+        
+        split: bool = self.checkBox.isChecked()
         
         work_count: int = 0
         out_dir: str = self.lineEdit_2.text()
@@ -79,29 +111,50 @@ class Window(QMainWindow, Ui_MainWindow):
         work_items: List[Generator[Tuple[int, int, ParseResult]]] = []
         for item in items:
             pdf_path: str = item.text()
-            work_count += PDFUtils.page_count(pdf_path)
-            work_items.append(parse_pdfs(pdfs_path = pdf_path, out_dir = out_dir))
+            page_count: int= PDFUtils.page_count(pdf_path)
+            work_count += page_count
+            work_items.append(parse_pdfs(pdfs_path = pdf_path, out_dir = out_dir, split = split))
         
-        value: int = 0
+        self.progressBar.setStyleSheet(self.pgbStyleSheet)
         self.progressBar.setMaximum(work_count)
         self.progressBar.setMinimum(0)
-        self.progressBar.setValue(value)
-        self.progressBar.update()
+        self.progressBar.setValue(0)
         
-        print(work_count)
-        print(work_items)
-        
+        i = 0
+        error_count: int = 0
         for work_item in work_items:
             while True:
                 try:
-                    next(work_item)
-                    value += 1
-                    self.progressBar.setValue(value)
-                    self.progressBar.update()
-                    # self.progressBar.setFormat(f'Procesando página {progress} de {total}...')
+                    result: Any = next(work_item)
+                    if isinstance(result[2], Exception):
+                        raise result
+                    self.progressBar.setValue(self.progressBar.value() + 1)
                 except StopIteration:
                     break
-                
+                except Exception as e:
+                    self.progressBar.setStyleSheet(self.pgbStyleSheet + '''
+                        QProgressBar::chunk {
+                            background-color: #AA0000;
+                        }''')
+                    # style: QtWidgets.QStyle | None = self.progressBar.style()
+                    # style.unpolish(self.progressBar)
+                    # style.polish(self.progressBar)
+                    self.progressBar.update()
+                    error_count += 1
+            i += 1
+                    
+        self.label_4.setVisible(True)
+        
+        if error_count > 0:
+            self.progressBar.setValue(work_count)
+            self.label_4.setStyleSheet('color: red;')
+        else:
+            self.label_4.setStyleSheet('color: green;')
+        self.label_4.setText(f'Proceso completado. Éxito: {len(items) - error_count} / Error: {error_count}')
+        
+        # Only works on Windows
+        os.startfile(out_dir)
+        
         self.pushButton_3.setEnabled(True)
             
         

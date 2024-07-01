@@ -2,9 +2,9 @@
 
 # Python Imports
 import json
-import logging
+import math
 import re
-from tkinter import S
+import logging
 from typing import Any, AnyStr, Dict, List, Sequence, Tuple, TypedDict, final
 from typing_extensions import deprecated
 
@@ -15,7 +15,7 @@ from pdfminer.pdftypes import resolve1
 from pdfminer.layout import LTComponent
 from pdfminer.psparser import PSLiteral, PSKeyword
 from pdfminer.utils import decode_text
-from numpy import dot, empty_like, float64, isin
+from numpy import dot, empty_like, float64
 from numpy.typing import NDArray
 
 # Local Imports
@@ -26,7 +26,7 @@ LOG: logging.Logger = logging.getLogger(__name__)
 PDFField = tuple[str, str]
 XYCoord = Tuple[float, float]
 LineSegment = Tuple[XYCoord, XYCoord]
-XYIntersect = Tuple[XYCoord, Tuple[LineSegment, LineSegment]]
+XYIntersect = Tuple[XYCoord, Tuple[Any, Any]]
 
 
 class PDFException(Exception):
@@ -81,11 +81,25 @@ class PDFUtils(Final):
             return fields
 
     @staticmethod
+    def load_form_fields_raw(pdf_path: str) -> List[Any]:
+        with open(pdf_path, 'rb') as file:
+            parser = PDFParser(file)
+            doc = PDFDocument(parser)
+            parser.set_document(doc)
+            
+            catalog: Dict[Any, Any] = resolve1(doc.catalog)
+            if 'AcroForm' not in catalog:
+                raise PDFException(f'No \'AcroForm\' field found in document catalog for PDF at \'{pdf_path}\'')
+            
+            acro_form: Dict[Any, Any] = resolve1(doc.catalog['AcroForm'])['Fields']
+            return [PDFUtils._decode_form_field(f) for f in acro_form]
+
+    @staticmethod
     def _decode_form_field(field: Dict[str, Any] | List[Any] | Any) -> Dict[str, Any] | List[Any] | Any:
         field = resolve1(field)
         
         if TypeUtils.is_iterable(field) and not isinstance(field, list):
-            for attr in [a for a in field if a in ['T', 'V', 'Kids']]:
+            for attr in [a for a in field if a in ['T', 'V', 'Kids', 'P']]:
                 field[attr] = PDFUtils._decode_form_field(field.get(attr))
         elif isinstance(field, list):
             field = [PDFUtils._decode_form_field(v) for v in field]
@@ -168,10 +182,10 @@ class PDFLayoutUtils(Final):
     @staticmethod
     def bbox(element: LTComponent) -> BBox:
         return {
-            'x0': element.bbox[0], 
-            'y0': element.bbox[1], 
-            'x1': element.bbox[2], 
-            'y1': element.bbox[3],
+            'x0': round(element.bbox[0], 1), 
+            'y0': round(element.bbox[1], 1), 
+            'x1': round(element.bbox[2], 1), 
+            'y1': round(element.bbox[3], 1),
             'width': element.bbox[2] - element.bbox[0],
             'height': element.bbox[3] - element.bbox[1],
         }

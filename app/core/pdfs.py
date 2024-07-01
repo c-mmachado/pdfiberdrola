@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
+from cmath import rect
+import math
 import os
 import json
 import shutil
 import logging
 from pathlib import Path
 from collections import deque
+from turtle import right
 from typing import Any, AnyStr, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
@@ -14,18 +17,20 @@ import pandas
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, LTTextBoxHorizontal, LTTextLineHorizontal
+
+from app.core.highlighter import PDFBBoxHighlighter
 os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
 
 # Local Imports
 from app.config import settings
 from app.core.mv import parse_mv_pdf
 from app.core.preventive import parse_preventive_pdf
-from app.model.pdfs import PDFLayoutElement, PDFLayoutLine, PDFLayoutContainer
+from app.model.pdfs import PDFLayoutElement, PDFLayoutLine, PDFLayoutContainer, PDFLayoutPage, PDFLayoutPoint, PDFLayoutRect
 from app.model.parser import PDFParseException, PDFType, ParseResult
 from app.utils.paths import is_valid_dir, is_valid_file, make_path, remove_extension
 from app.utils.files import create_dir, is_pdf_file
-from app.utils.pdfs import PDFLayoutUtils, PDFUtils, XYCoord, XYIntersect
-from app.utils.excel import ExcelUtils
+from app.utils.pdfs import LineSegment, PDFLayoutUtils, PDFUtils, XYCoord, XYIntersect
+from app.utils.excel import ExcelCell, ExcelUtils
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
@@ -34,7 +39,7 @@ LOG: logging.Logger = logging.getLogger(__name__)
 def _sort_pdf_page_elements(page: LTPage) -> PDFLayoutElement:
     seen = 0
     lines: List[PDFLayoutLine] = []
-    root = PDFLayoutContainer(page)
+    root = PDFLayoutPage(page)
     components: List[LTComponent] = sorted(page, key = lambda e: (e.bbox[1], -e.bbox[0]))
     components_stack = deque(components, maxlen = len(components))
     
@@ -52,6 +57,7 @@ def _sort_pdf_page_elements(page: LTPage) -> PDFLayoutElement:
         
         if isinstance(component, (LTRect)):
             # Destructure the rectangle into 4 lines and add them to the lines stack
+            x0: float; y0: float; x1: float; y1: float
             x0, y0, x1, y1 = component.bbox
             lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x1, y0))))
             lines.append(PDFLayoutLine(LTLine(component.linewidth, (x0, y0), (x0, y1))))
@@ -76,12 +82,26 @@ def _sort_pdf_page_elements(page: LTPage) -> PDFLayoutElement:
             intercept: XYCoord | None = PDFLayoutUtils.intersection(line.segment, l.segment)
             
             if intercept is not None:
-                intercepts.append((intercept, (line, l)))
-    
+                vline: PDFLayoutLine = line if line.orientation == 'vertical' else l
+                hline: PDFLayoutLine = line if line.orientation == 'horizontal' else l
+                # if intercept[1] <= vline.bbox['y1']:
+                #     intercepts.append((intercept, (hline,)))
+                # intercepts.append((intercept, (line, l)))
+                
+                for i in intercepts:
+                    if i[0] == intercept:
+                        if intercept[1] <= vline.bbox['y1']:
+                            i[1] = [hline]
+                        i[1] = [line, l]
+                        break
+                else:
+                    if intercept[1] <= vline.bbox['y1']:
+                        intercepts.append([intercept, [hline]])
+                    intercepts.append([intercept, [line, l]])
+                
     # Split the intercepts list into a list of lists representing a 2D matrix of the intercepts
     # where each row groups all intercepts that share the same y0 coordinate, and sort the intercepts
     # by their x0 coordinate to process them in order to reconstruct the layout tree
-    intercepts = sorted(intercepts, key = lambda e: (e[0][1], e[0][0]))
     intercepts_2d: List[List[XYIntersect]] = []
     for intercept in intercepts:
         if len(intercepts_2d) == 0:
@@ -91,26 +111,132 @@ def _sort_pdf_page_elements(page: LTPage) -> PDFLayoutElement:
         else:
             intercepts_2d.append([intercept])
     
-    
-    print('[\n')
+    intercepts_2d_str = '[\n'
     for i in intercepts_2d:
-        print('\t\t[\n')
+        intercepts_2d_str += '\t[\n'
         for j in i:
-            print(f'\t\t\t{j}')
-        print('\t\t]\n')
-    print(']\n')
+            intercepts_2d_str += f'\t\t{j},\n'
+        intercepts_2d_str += '\t],\n'
+    intercepts_2d_str += ']\n'
+    # LOG.debug(f'Intercepts 2D:\n {intercepts_2d_str}')
+    
+    # for rect in _reconstruct_rects(intercepts_2d):
+    #     root.add_direct_child(rect)
+    
+    for point in intercepts:
+        root.add_direct_child(PDFLayoutPoint(point[0][0], point[0][1]))
+    return root
  
+    for rect in _reconstruct_rects():
+        LOG.debug(rect)
+        if rect is not None:
+            root.add_child(rect)
     
-    # print(sorted(intercepts, key=lambda e: (e[0][1], e[0][0]))) 
-    print(len(intercepts)) 
+    seen = 0
+    remain: int = len(components_stack)
+    while seen < remain and len(components_stack) > 0:
+        el: LTComponent = components_stack.popleft()
+        for child in root.children:
+            if isinstance(child, PDFLayoutContainer) and PDFLayoutUtils.bbox_overlaps(PDFLayoutUtils.bbox(el), child.bbox):
+                child.add_child(PDFLayoutElement(el))
+                break
+        else:
+            components_stack.append(el)
+        seen += 1
+
+    while len(components_stack) > 0:
+        el: LTComponent = components_stack.popleft()
     
-    # LOG.debug(f'Parsed PDF page layout:\n {root}')
-    # LOG.debug(f'Parsed PDF page children count: {len(root.children())}')
-    # LOG.debug(f'Visited page {page.pageid} components count: {seen}')
-    # LOG.debug(f'Aggregatted decoupled lines:\n {lines}')
+    print(root) 
     
     return root
 
+def _reconstruct_rects(intercepts_2d: List[List[XYIntersect]]) -> Generator[PDFLayoutRect, None, None]:
+    eps = 0.5
+    
+    def _points_right(l_n: int, x: int, max_x: float) -> List[XYIntersect]:
+        points: List[XYIntersect] = []
+        if l_n >= len(intercepts_2d):
+            return points
+        
+        for i in range(len(intercepts_2d[l_n])):
+            px: float = intercepts_2d[l_n][i][0][0]
+            
+            if px <= max_x + eps:
+                if px > x:
+                    points.append(intercepts_2d[l_n][i])
+            else:
+                break
+        return points
+    
+    def _points_above(l_n: int, x: float, max_y: float) -> List[XYIntersect]:
+        points: List[XYIntersect] = []
+        if l_n >= len(intercepts_2d):
+            return points
+        
+        for i in range(l_n + 1, len(intercepts_2d)):
+            for j in range(len(intercepts_2d[i])):
+                px: float = intercepts_2d[i][j][0][0]
+                py: float = intercepts_2d[i][j][0][1]
+                
+                if px <= x + eps:
+                    if py > max_y + eps:
+                        break
+                    if abs(px - x) <= eps and py <= max_y + eps:
+                        points.append(intercepts_2d[i][j])
+                else:
+                    break
+            else:
+                continue
+            break
+        return points
+    
+    for l_n in range(len(intercepts_2d)):
+        for p_n in range(len(intercepts_2d[l_n])):
+            i0: XYIntersect = intercepts_2d[l_n][p_n]
+            p0 = i0[0]
+            if len(i0[1]) < 2:
+                continue
+            
+            lv0: PDFLayoutLine = i0[1][0] if i0[1][0].orientation == 'vertical' else i0[1][1]
+            lh0: PDFLayoutLine = i0[1][0] if i0[1][0].orientation == 'horizontal' else i0[1][1]
+            p0_right: List[XYIntersect] = _points_right(l_n, p0[0], lh0.bbox['x1'])
+            p0_above: List[XYIntersect] = _points_above(l_n, p0[0], lv0.bbox['y1'])
+            
+            for i1 in p0_right:
+                p1 = i1[0]
+                if len(i1[1]) < 2:
+                    continue
+                
+                # For each point to the right of p0, named p1, get points above that point that lie inside the vertical line above p1
+                lv1: PDFLayoutLine = i1[1][0] if i1[1][0].orientation == 'vertical' else i1[1][1]
+                p1_above: List[XYIntersect] = _points_above(l_n, p1[0], lv1.bbox['y1'])
+                
+                for k in range(len(p0_above)):
+                    i2 = p0_above[k]
+                    p2 = i2[0]
+                    # For each point above p0, named p2, get points to the right of p2 that lie inside the horizontal line to the right of p2
+                    lh2: PDFLayoutLine = i2[1][0] if i2[1][0].orientation == 'horizontal' else i2[1][1]
+                    p2_right: List[XYIntersect] = _points_right(l_n + k + 1, p2[0], lh2.bbox['x1'])
+                    
+                    # Get the intersection between the points to the right of p2 and the points above p1, that is, the points that
+                    # lie both inside the line above p1 and the line to the right of p2
+                    p3: frozenset[Tuple[float, float]] = frozenset([p[0] for p in p1_above]).intersection(frozenset([p[0] for p in p2_right]))
+                    
+                    # If somehow multiple intercepts are found, sort by x and get first
+                    if len(p3) >= 1:
+                        p3 = sorted(p3, key = lambda p: p[0])[0]
+                        # Create rectangle from p0, p1, p2, p3 and break out of loop as we are only looking for smallest rectangle
+                        yield PDFLayoutRect(LTRect(lh2.element.linewidth, (p0[0], p0[1], p3[0], p3[1])))
+                        break
+                else:
+                    # Will only reach here if no intersection between the points to the right of p2 and the points above p1 is found
+                    # If so continue to next point right of p0 and repeat the process
+                    continue
+                # Will only reach here if rectangle is found, move to next point
+                break
+                    
+                        
 def _resolve_pdf_type(first_page: PageObject) -> PDFType:
     page_lines: str = first_page.extract_text(extraction_mode='layout').split('\n')
     first_line: str = page_lines[0].strip().lower()
@@ -121,12 +247,13 @@ def _resolve_pdf_type(first_page: PageObject) -> PDFType:
         return PDFType.PREVENTIVE
     return PDFType.UNKNOWN
 
-def parse_pdf(pdf_path: str, df: Dict[PDFType, pandas.DataFrame]) -> Generator[ParseResult | PDFParseException, None, None]:
+def parse_pdf(pdf_path: str, df: Dict[PDFType, pandas.DataFrame]) -> Generator[ParseResult | Exception, None, None]:
     LOG.debug(f'Starting parsing of \'{pdf_path}\'...')
     
     if not is_pdf_file(f'{pdf_path}'):
         LOG.debug(f'File \'{pdf_path}\' is not of PDF type. Skipping...')
-        raise PDFParseException(f'File \'{pdf_path}\' is not of PDF type')
+        yield PDFParseException(f'File \'{pdf_path}\' is not of PDF type')
+        return
     LOG.debug(f'File \'{pdf_path}\' is of PDF type. Proceeding...')
     
     LOG.debug(f'Resolving PDF type...')
@@ -137,17 +264,18 @@ def parse_pdf(pdf_path: str, df: Dict[PDFType, pandas.DataFrame]) -> Generator[P
     LOG.debug(f'Resolved PDF type: {parse_result["Type"]}')
     
     pdf_pages_iter: Iterator[LTPage] = extract_pages(pdf_path)
-    # _highlight_bbox_pdf(pdf_path, f'out/', dpi = 500)
-    # _sort_pdf_page_elements(next(pdf_pages_iter))
-    # _sort_pdf_page_elements(next(pdf_pages_iter))
-    # _sort_pdf_page_elements(next(pdf_pages_iter))
+    # highlighter = PDFBBoxHighlighter()
+    # highlighter.highlight_bbox_pdf(pdf_path, 'bbox/', dpi = 500)
     
+    # while (page := next(pdf_pages_iter, None)) != None:
+    #     root: PDFLayoutPage = _sort_pdf_page_elements(page)
+        
     match parse_result['Type']:
         case PDFType.PREVENTIVE:
             yield from parse_preventive_pdf(pdf_pages_iter, parse_result, pdf_path, df[PDFType.PREVENTIVE])
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case PDFType.MV:
-            yield from parse_mv_pdf(iter(pdf_pages), parse_result, df[PDFType.MV])
+            yield from parse_mv_pdf(pdf_pages_iter, parse_result, df[PDFType.MV])
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}') 
         case _:
             LOG.debug(f'Unknown PDF type')
@@ -159,16 +287,17 @@ def parse_pdf_gen(*,
                   out_path: AnyStr,
                   df: Dict[PDFType, pandas.DataFrame]) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
     page_count: int = PDFUtils.page_count(pdf_path)
+    page_num = 0
     
     try:
         file_path: str = make_path(f'{pdf_path}')
         LOG.debug(f'Processing file \'{file_path}\'...')
     
-        page_num = 0
-        page_gen: Generator[ParseResult | PDFParseException] = parse_pdf(f'{file_path}', df)
+       
+        page_gen: Generator[ParseResult | Exception] = parse_pdf(f'{file_path}', df)
         while True:
             try:
-                parse_result: ParseResult | PDFParseException = next(page_gen)
+                parse_result: ParseResult | Exception = next(page_gen)
                 page_num += 1
                 if isinstance(parse_result, Exception):
                     raise parse_result
@@ -189,12 +318,12 @@ def parse_pdf_gen(*,
         
         yield (page_num, page_count, parse_result)
         
-    except (PDFParseException) as e:
+    except Exception as e:
         LOG.error(f'Error while parsing file \'{file_path}\':\n {e}')
         error_dir: str = make_path(f'{out_dir}/error')
         if create_dir(error_dir, raise_error = False):
             shutil.copyfile(f'{file_path}', f'{error_dir}/{os.path.basename(file_path)}')
-        yield e
+        yield (page_num, page_count, e)
     
     
 def resolve_file_output(file_path: AnyStr, 
@@ -252,11 +381,11 @@ def setup_output(out_dir: str) -> None:
         LOG.error(f'Error while creating output directory \'{out_dir}\':\n {e}')
         raise e
 
-def parse_pdfs(*,
-               pdfs_path: AnyStr, 
+def parse_pdfs(pdfs_path: AnyStr, 
                out_dir: AnyStr, 
                split: bool = False, 
-               excel_template: AnyStr = settings().excel_template) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
+               excel_template: AnyStr = settings().excel_template,
+               excel_template_cell: ExcelCell = settings().excel_template_cell) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
     LOG.debug(f"Parsing PDFs from '{pdfs_path}' to '{out_dir}' using template '{excel_template}'...")
     
     setup_output(out_dir)
