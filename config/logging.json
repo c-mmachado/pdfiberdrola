@@ -28,6 +28,10 @@
         "pdfminer": {
             "level": "INFO",
             "handlers": []
+        },
+        "PIL": {
+            "level": "INFO",
+            "handlers": []
         }
     },
     "root": {
