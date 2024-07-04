@@ -9,15 +9,15 @@ from collections import deque
 from typing import AnyStr, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
-import pandas
+from pandas import DataFrame, ExcelWriter
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
-from pdfminer.layout import LTPage, LTRect, LTTextContainer, LTCurve, LTLine, LTImage, LTFigure, LTComponent, LTTextBoxHorizontal, LTTextLineHorizontal
-
-# os.environ["PATH"] = f"C:\\Users\\squil\\Desktop\\poppler-21.03.0\\Library\\bin"
+from pdfminer.layout import LTPage, LTRect, LTLine, LTComponent
 
 # Local Imports
 from app.config import settings
+from app.core import preventive
+from app.core import mv
 from app.core.mv import parse_mv_pdf
 from app.core.preventive import parse_preventive_pdf
 from app.model.pdfs import PDFLayoutElement, PDFLayoutLine, PDFLayoutContainer, PDFLayoutPage, PDFLayoutPoint, PDFLayoutRect
@@ -242,7 +242,7 @@ def _resolve_pdf_type(first_page: PageObject) -> PDFType:
         return PDFType.PREVENTIVE
     return PDFType.UNKNOWN
 
-def parse_pdf(pdf_path: str, df: Dict[PDFType, pandas.DataFrame]) -> Generator[ParseResult | Exception, None, None]:
+def parse_pdf(pdf_path: str, df: Dict[PDFType, DataFrame]) -> Generator[ParseResult | Exception, None, None]:
     LOG.debug(f'Starting parsing of \'{pdf_path}\'...')
     
     if not is_pdf_file(f'{pdf_path}'):
@@ -280,14 +280,14 @@ def parse_pdf_gen(*,
                   pdf_path: str, 
                   out_dir: AnyStr,
                   out_path: AnyStr,
-                  df: Dict[PDFType, pandas.DataFrame]) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
+                  excel_cell: ExcelCell,
+                  df: Dict[PDFType, DataFrame]) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
     page_count: int = PDFUtils.page_count(pdf_path)
     page_num = 0
     
     try:
         file_path: str = make_path(f'{pdf_path}')
         LOG.debug(f'Processing file \'{file_path}\'...')
-    
        
         page_gen: Generator[ParseResult | Exception] = parse_pdf(f'{file_path}', df)
         while True:
@@ -302,12 +302,12 @@ def parse_pdf_gen(*,
             
         LOG.debug(f'Finished processing file \'{file_path}\'')
         LOG.debug(f'Writing parsed result to Excel template \'{out_path}\'...')
-        with pandas.ExcelWriter(out_path, 'openpyxl', if_sheet_exists = 'overlay', mode = 'a') as writer:
+        with ExcelWriter(out_path, 'openpyxl', if_sheet_exists = 'overlay', mode = 'a') as writer:
             df[parse_result['Type']].to_excel(excel_writer = writer,
                                               index = False, 
                                               header = False,
-                                              startrow = 4,
-                                              startcol = 1,
+                                              startrow = excel_cell[1],
+                                              startcol = excel_cell[0] - 1 if excel_cell[0] - 1 > 0 else 0,
                                               sheet_name = parse_result['Type'])
         LOG.debug(f'Parsed result written to Excel template \'{out_path}\'')
         
@@ -319,7 +319,6 @@ def parse_pdf_gen(*,
         if create_dir(error_dir, raise_error = False):
             shutil.copyfile(f'{file_path}', f'{error_dir}/{os.path.basename(file_path)}')
         yield (page_num, page_count, e)
-    
     
 def resolve_file_output(file_path: AnyStr, 
                         out_dir: AnyStr, 
@@ -353,7 +352,6 @@ def resolve_file_output(file_path: AnyStr,
         LOG.debug(f'Excel template copied to \'{excel_template_path}\'')
     return excel_template_path
 
-
 def resolve_files(pdfs_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, split: bool = False) -> Generator[Tuple[str, str], bool, None]:
     files: Generator[Tuple[str, str], bool]
     if is_valid_dir(pdfs_path):
@@ -380,7 +378,7 @@ def parse_pdfs(pdfs_path: AnyStr,
                out_dir: AnyStr, 
                split: bool = False, 
                excel_template: AnyStr = settings().excel_template,
-               excel_template_cell: ExcelCell = settings().excel_template_cell) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
+               excel_template_cell: ExcelCell = settings().excel_template_start_cell) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
     LOG.debug(f"Parsing PDFs from '{pdfs_path}' to '{out_dir}' using template '{excel_template}'...")
     
     setup_output(out_dir)
@@ -389,18 +387,24 @@ def parse_pdfs(pdfs_path: AnyStr,
         files: Generator[Tuple[str, str], bool] = resolve_files(pdfs_path, out_dir, excel_template, split)
         
         LOG.debug(f'Reading Excel template from \'{excel_template}\'...')
-        df: Dict[str, pandas.DataFrame] = ExcelUtils.read_excel(file_path = excel_template, 
-                                                                sheet_names = [PDFType.PREVENTIVE, PDFType.MV], 
-                                                                start_cell = (2, 4))
+        df: Dict[str, DataFrame] = ExcelUtils.read_excel(file_path = excel_template, 
+                                                         columns = {PDFType.PREVENTIVE: preventive.COLUMNS, PDFType.MV: mv.COLUMNS},
+                                                         sheet_names = [PDFType.PREVENTIVE, PDFType.MV], 
+                                                         start_cell = ExcelUtils.resolve_excel_cell(excel_template_cell))
         LOG.debug(f'Excel template read from \'{excel_template}\'')
         
         idx = 0
         while True:
             try:
+                f: str; o: str
                 next(files)
                 f, o = files.send(True if idx == 0 else False)
                 idx += 1
-                yield from parse_pdf_gen(pdf_path = f, out_dir = out_dir, out_path = o, df = df)
+                yield from parse_pdf_gen(pdf_path = f, 
+                                         out_dir = out_dir, 
+                                         out_path = o, 
+                                         excel_cell = ExcelUtils.resolve_excel_cell(excel_template_cell),
+                                         df = df)
             except StopIteration as e:
                 break
     except Exception as e:

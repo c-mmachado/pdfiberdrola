@@ -19,6 +19,17 @@ ExcelEngineName = Literal['xlsxwriter'] | Literal['openpyxl']
 @final
 class ExcelUtils(Final):
     @staticmethod
+    def resolve_excel_cell(cell: str) -> ExcelCell:
+        col = 0
+        row = 0
+        for c in cell:
+            if c.isalpha():
+                col: int = col * 26 + ord(c) - ord('A') + 1
+            if c.isdigit():
+                row: int = row * 10 + int(c)
+        return (col, row)
+    
+    @staticmethod
     def append_to_excel(*, 
                         file_path: str, 
                         df: pandas.DataFrame,
@@ -36,11 +47,21 @@ class ExcelUtils(Final):
                 
     @staticmethod
     def read_excel(*, 
-                   file_path: str, 
+                   file_path: str,
+                   columns: Dict[str, Sequence[str]],
                    sheet_names: Sequence[str],
-                   start_cell: ExcelCell = (0, 0)) -> Dict[str, pandas.DataFrame]:
-        return pandas.read_excel(file_path, 
-                                 header = start_cell[1] - 1, 
-                                 index_col = [start_cell[0] - 1], 
-                                 nrows = 0, 
-                                 sheet_name = sheet_names)
+                   start_cell: ExcelCell = (1, 1)) -> Dict[str, pandas.DataFrame]:
+        df: Dict[str, pandas.DataFrame] = pandas.read_excel(file_path, 
+                                                            header = None, # start_cell[1] - 1,
+                                                            usecols = lambda x: isinstance(x, int) and x >= start_cell[0] - 1,
+                                                            index_col = None, # [start_cell[0] - 1],
+                                                            skiprows = start_cell[1], 
+                                                            sheet_name = sheet_names)
+        for k in df.keys():
+            if df[k].empty:
+                df[k] = df[k].reindex(columns[k], axis = 1)
+            else:
+                column_map = dict(zip(df[k].columns, columns[k]))
+                df[k] = df[k].rename(columns = column_map)
+                
+        return df

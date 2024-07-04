@@ -1,16 +1,3 @@
-# Compilation mode, standalone everywhere, except on macOS there app bundle
-# nuitka-project-if: {OS} in ("Windows", "Linux", "FreeBSD"):
-#    nuitka-project: --onefile
-# nuitka-project-if: {OS} == "Darwin":
-#    nuitka-project: --standalone
-#    nuitka-project: --macos-create-app-bundle
-#
-# Debugging options, controlled via environment variable at compile time.
-# nuitka-project-if: os.getenv("DEBUG_COMPILATION", "no") == "yes"
-#     nuitka-project: --enable-console
-# nuitka-project-else:
-#     nuitka-project: --disable-console
-
 # -*- coding: utf-8 -*-
 
 # Python Imports
@@ -67,6 +54,20 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
                              action = 'store_true',
                              default = False,
                              help = 'Whether to split the output excel file for each input pdf [default: %(default)s]')
+    meta.parser.add_argument('-et',
+                             '--excel-template',
+                             dest = 'excel_template',
+                             type = str,
+                             action = 'store',
+                             default = settings().excel_template,
+                             help = 'The excel template to use to generate the output file(s) [default: %(default)s]')
+    meta.parser.add_argument('-etsc',
+                             '--excel-template-start-cell',
+                             dest = 'excel_template_cell',
+                             type = str,
+                             action = 'store',
+                             default = settings().excel_template_start_cell,
+                             help = 'The excel template cell where the output data should start to be written to. Should be an excel cell format, eg. B4 [default: %(default)s]')
 
 @entry_point(sys.argv)
 @meta(prog="main.py", 
@@ -74,19 +75,27 @@ def arguments(meta: SimpleCallableMetaInfo) -> None:
       epilog=False, 
       arguments=arguments)
 def main(*, 
-         pdfs_path: Optional[AnyStr], 
-         out_dir: Optional[AnyStr], 
+         pdfs_path: AnyStr, 
+         out_dir: AnyStr, 
          split: bool = False,
-         no_gui: bool = False) -> None:
+         no_gui: bool = False,
+         excel_template: Optional[str] = settings().excel_template,
+         excel_template_cell: Optional[str] = settings().excel_template_start_cell) -> None:
     LOG.debug(f'Running main application entry point...')
     LOG.debug(f'Application settings: {settings()}')
     LOG.debug(f'PDFs path: {pdfs_path}')
     LOG.debug(f'Output directory: {out_dir}')
     LOG.debug(f'Split: {split}')
     LOG.debug(f'No GUI: {no_gui}')
+    LOG.debug(f'Excel Template: {excel_template}')
+    LOG.debug(f'Excel Template Start Cell: {excel_template_cell}')
     
     if no_gui:
-        [_ for _ in parse_pdfs(pdfs_path = pdfs_path, out_dir = out_dir, split = split)]
+        [_ for _ in parse_pdfs(pdfs_path = pdfs_path, 
+                               out_dir = out_dir, 
+                               split = split, 
+                               excel_template = excel_template, 
+                               excel_template_cell = excel_template_cell)]
     else:
         from app.gui.window import Window
         Window().run()

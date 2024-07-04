@@ -152,8 +152,8 @@ class PDFLayoutUtils(Final):
                 # +-------------------+  
                 # If top-right inner box corner is inside the bounding box
                 # The entire box is inside the bounding box.
-                print(f'e2 {bbox2}')
-                print('The entire box is inside the bounding box.')
+                LOG.debug(f'e2 {bbox2}')
+                LOG.debug('The entire box is inside the bounding box.')
             else:
                 #                            +-------------+
                 #         +-------+          |       +-------+      
@@ -163,8 +163,8 @@ class PDFLayoutUtils(Final):
                 # |       +-------+   |      |       +-------+   
                 # +-------------------+      +-------------+
                 # Some part of the box is outside the bounding box (Consider area% cutoff to be inside the bounding box)
-                print(f'e2 {bbox2}')
-                print('Some part of the box is outside the bounding box')
+                LOG.debug(f'e2 {bbox2}')
+                LOG.debug('Some part of the box is outside the bounding box')
             return True
         #                                     +-------+                    +-------+   
         #                                     |       |                    |       |

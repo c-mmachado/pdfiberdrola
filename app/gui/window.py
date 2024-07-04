@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from os import error
 import os
 from pathlib import Path
 from typing import Any, Generator, List, Self, Tuple
@@ -10,8 +9,7 @@ from typing import Any, Generator, List, Self, Tuple
 from PyQt6 import QtWidgets
 from PyQt6.QtGui import QIcon, QPalette
 from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem, QWidget, QHBoxLayout
-from PyQt6.QtCore import pyqtSlot, QDir, QSize, Qt
-from PyQt6 import QtGui, QtCore
+from PyQt6.QtCore import pyqtSlot, QDir
 
 # Local Imports
 from app.config import settings
@@ -23,6 +21,7 @@ from app.utils.pdfs import PDFUtils
 
 # Constants
 app = QApplication([])
+
 
 class Window(QMainWindow, Ui_MainWindow):
     class WindowTitleBar(QWidget):
@@ -99,11 +98,19 @@ class Window(QMainWindow, Ui_MainWindow):
             self.pushButton_3.setEnabled(False)
     
     @pyqtSlot()
+    def browse_template(self) -> None:
+        fnames: List[str] = self._open_file_dialog()
+        if fnames and len(fnames) > 0:
+            fname: str = fnames[0]
+            self.lineEdit_3.setText(fname)
+            
+    @pyqtSlot()
     def process(self) -> None:
         self.label_4.setVisible(False)
         self.pushButton_3.setEnabled(False)
         
         split: bool = self.checkBox.isChecked()
+        template: str = self.lineEdit_3.text()
         
         work_count: int = 0
         out_dir: str = self.lineEdit_2.text()
@@ -113,7 +120,10 @@ class Window(QMainWindow, Ui_MainWindow):
             pdf_path: str = item.text()
             page_count: int= PDFUtils.page_count(pdf_path)
             work_count += page_count
-            work_items.append(parse_pdfs(pdfs_path = pdf_path, out_dir = out_dir, split = split))
+            work_items.append(parse_pdfs(pdfs_path = pdf_path, 
+                                         out_dir = out_dir, 
+                                         split = split, 
+                                         excel_template = template if template else settings().excel_template))
         
         self.progressBar.setStyleSheet(self.pgbStyleSheet)
         self.progressBar.setMaximum(work_count)

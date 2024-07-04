@@ -10,7 +10,7 @@ from typing import Callable, Optional, AnyStr, Any, Mapping, Self, Tuple
 from packaging.version import Version
 
 # Local Imports
-from app.config.config import AppSettings
+from app.config.config import AppSettings, MetaProperties
 from app.utils.types import TypeUtils
 
 # Constants
@@ -72,7 +72,7 @@ Status: ${status}'''
                  func: SimpleCallable,
                  *,
                  prog: str,
-                 properties: AppSettings,
+                 properties: MetaProperties,
                  parser: Optional[argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]] = None,
                  arguments: Optional[Callable[['SimpleCallableMetaInfo'], None]] = None,
                  epilog: bool = False) -> Self:

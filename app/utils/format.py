@@ -2,7 +2,6 @@
 
 # Python Imports
 import json
-
 from typing import AnyStr, Any
 
 # Third-Party Imports
