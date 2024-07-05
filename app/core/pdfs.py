@@ -330,7 +330,7 @@ def resolve_file_output(file_path: AnyStr,
         out_file: str = make_path(f'{out_dir}/output.xlsx')
         LOG.debug(f'No split option detected. Copying Excel template to \'{out_file}\'...')
         
-        if not is_valid_file(excel_template) or overwrite:
+        if not is_valid_file(out_file) or overwrite:
             LOG.debug(f'Copying Excel template to \'{out_file}\'...')
             shutil.copyfile(excel_template, out_file)
         else:
@@ -352,7 +352,10 @@ def resolve_file_output(file_path: AnyStr,
         LOG.debug(f'Excel template copied to \'{excel_template_path}\'')
     return excel_template_path
 
-def resolve_files(pdfs_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, split: bool = False) -> Generator[Tuple[str, str], bool, None]:
+def resolve_files(pdfs_path: AnyStr | List[AnyStr], 
+                  out_dir: AnyStr, 
+                  excel_template: AnyStr, 
+                  split: bool = False) -> Generator[Tuple[str, str], bool, None]:
     files: Generator[Tuple[str, str], bool]
     if is_valid_dir(pdfs_path):
         LOG.debug(f'Path \'{pdfs_path}\' is a valid directory')
@@ -360,6 +363,9 @@ def resolve_files(pdfs_path: AnyStr, out_dir: AnyStr, excel_template: AnyStr, sp
     elif is_valid_file(pdfs_path):
         LOG.debug(f'Path \'{pdfs_path}\' is a valid file')
         files = (f for f in [make_path(pdfs_path)])
+    elif isinstance(pdfs_path, list):
+        LOG.debug(f'Path \'{pdfs_path}\' is a list of files')
+        files = (make_path(f) for f in pdfs_path)
     
     for f in files:
         overwrite: bool = yield
@@ -374,7 +380,7 @@ def setup_output(out_dir: str) -> None:
         LOG.error(f'Error while creating output directory \'{out_dir}\':\n {e}')
         raise e
 
-def parse_pdfs(pdfs_path: AnyStr, 
+def parse_pdfs(pdfs_path: AnyStr | List[AnyStr], 
                out_dir: AnyStr, 
                split: bool = False, 
                excel_template: AnyStr = settings().excel_template,

@@ -144,7 +144,7 @@ def is_valid_dir(path: str) -> bool:
         whether the given file path is a valid directory
     """
 
-    if not path or not path.strip():
+    if not path or not isinstance(path, (str, bytes)) or not path.strip():
         return False
     path = make_path(path)
 
@@ -170,7 +170,7 @@ def is_valid_file(path: str) -> bool:
         whether the given file path is a valid file
     """
 
-    if not path or not path.strip():
+    if not path or not isinstance(path, (str, bytes)) or not path.strip():
         return False
     path = make_path(path)
 
@@ -200,7 +200,7 @@ def make_path(path: str, *args: str) -> str:
         the concatenated and standardized file path
     """
 
-    if not path or not path.strip():
+    if not path or not isinstance(path, (str, bytes)) or not path.strip():
         return ''
 
     root_ref = False

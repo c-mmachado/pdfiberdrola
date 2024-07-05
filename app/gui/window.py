@@ -115,43 +115,42 @@ class Window(QMainWindow, Ui_MainWindow):
         work_count: int = 0
         out_dir: str = self.lineEdit_2.text()
         items: List[QListWidgetItem] = [self.listWidget.item(x) for x in range(self.listWidget.count())]
-        work_items: List[Generator[Tuple[int, int, ParseResult]]] = []
+        pdf_paths: List[str] = []
         for item in items:
             pdf_path: str = item.text()
+            pdf_paths.append(pdf_path)
             page_count: int= PDFUtils.page_count(pdf_path)
             work_count += page_count
-            work_items.append(parse_pdfs(pdfs_path = pdf_path, 
-                                         out_dir = out_dir, 
-                                         split = split, 
-                                         excel_template = template if template else settings().excel_template))
+        
+        work: Generator[Tuple[int, int, ParseResult]] = parse_pdfs(pdfs_path = pdf_paths, 
+                                                                   out_dir = out_dir, 
+                                                                   split = split, 
+                                                                   excel_template = template if template else settings().excel_template)
         
         self.progressBar.setStyleSheet(self.pgbStyleSheet)
         self.progressBar.setMaximum(work_count)
         self.progressBar.setMinimum(0)
         self.progressBar.setValue(0)
         
-        i = 0
         error_count: int = 0
-        for work_item in work_items:
-            while True:
-                try:
-                    result: Any = next(work_item)
-                    if isinstance(result[2], Exception):
-                        raise result
-                    self.progressBar.setValue(self.progressBar.value() + 1)
-                except StopIteration:
-                    break
-                except Exception as e:
-                    self.progressBar.setStyleSheet(self.pgbStyleSheet + '''
-                        QProgressBar::chunk {
-                            background-color: #AA0000;
-                        }''')
-                    # style: QtWidgets.QStyle | None = self.progressBar.style()
-                    # style.unpolish(self.progressBar)
-                    # style.polish(self.progressBar)
-                    self.progressBar.update()
-                    error_count += 1
-            i += 1
+        while True:
+            try:
+                res: Tuple[int, int, ParseResult] | Exception = next(work)
+                if isinstance(res[2], Exception):
+                    raise res
+                self.progressBar.setValue(self.progressBar.value() + 1)
+            except StopIteration:
+                break
+            except Exception as _:
+                self.progressBar.setStyleSheet(self.pgbStyleSheet + '''
+                    QProgressBar::chunk {
+                        background-color: #AA0000;
+                    }''')
+                # style: QtWidgets.QStyle | None = self.progressBar.style()
+                # style.unpolish(self.progressBar)
+                # style.polish(self.progressBar)
+                self.progressBar.update()
+                error_count += 1
                     
         self.label_4.setVisible(True)
         
