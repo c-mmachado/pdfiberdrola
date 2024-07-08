@@ -3,12 +3,12 @@
 # Python Imports
 import os
 from pathlib import Path
-from typing import Any, Generator, List, Self, Tuple
+from typing import Generator, List, Self, Tuple
 
 # Third-Party Imports
 from PyQt6 import QtWidgets
-from PyQt6.QtGui import QIcon, QPalette
-from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem, QWidget, QHBoxLayout
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem
 from PyQt6.QtCore import pyqtSlot, QDir
 
 # Local Imports
@@ -16,23 +16,16 @@ from app.config import settings
 from app.core.pdfs import parse_pdfs
 from app.gui.main_window import Ui_MainWindow
 from app.model.parser import ParseResult
-from app.utils.paths import is_valid_dir
+from app.utils.paths import is_valid_dir, is_valid_file, make_path
 from app.utils.pdfs import PDFUtils
+from app.utils.types import TypeUtils
 
 # Constants
 app = QApplication([])
 
 
 class Window(QMainWindow, Ui_MainWindow):
-    class WindowTitleBar(QWidget):
-        def __init__(self, parent: QWidget) -> None:
-            super().__init__(parent)
-            self.setAutoFillBackground(True)
-            self.setBackgroundRole(QPalette.ColorRole.Highlight)
-            self.initial_pos = None
-            title_bar_layout = QHBoxLayout(self)
-            title_bar_layout.setContentsMargins(1, 1, 1, 1)
-            title_bar_layout.setSpacing(2)
+    PERSIST = 'resources/persist'
     
     def __init__(self) -> Self:
         super().__init__()
@@ -55,30 +48,57 @@ class Window(QMainWindow, Ui_MainWindow):
         '''
         self.label_4.setVisible(False)
         self.progressBar.setStyleSheet(self.pgbStyleSheet)
+        self.load_memento()
         
+    def load_memento(self) -> None:
+        if is_valid_file(self.PERSIST):
+            with open(self.PERSIST, 'r') as f:
+                lines: List[str] = f.readlines()
+                if len(lines) == 2:
+                    self.lineEdit.setText(lines[0].strip())
+                    self.lineEdit_2.setText(lines[1].strip())
+                    
+    def save_memento(self) -> None:
+        with open(self.PERSIST, 'w') as f:
+            f.write(f'{self.lineEdit.text()}\n{self.lineEdit_2.text()}')
+    
     @pyqtSlot()
     def browse_input_files(self) -> None:
-        fnames: List[str] = self._open_file_dialog()
-        if fnames and len(fnames) > 0:
-            fname: str = fnames[0]
+        directory: str = self.lineEdit.text() if self.lineEdit.text() else ''
+        if not is_valid_dir(directory):
+            directory = f'{directory}/..'
+            
+        fnames: List[str] = self._open_file_dialog(caption = 'Selecciona los archivos a procesar',
+                                                   file_mode = QFileDialog.FileMode.ExistingFiles,
+                                                   directory = directory)
+        
+        has_items: bool = False
+        if fnames and TypeUtils.is_iterable(fnames):
+            fname: str 
+            if len(fnames) > 1:
+                fname = ', '.join([f'"{os.path.basename(f)}"' for f in fnames])
+            else:
+                fname = fnames[0]
             self.lineEdit.setText(fname)
+            self.save_memento()
             
             self.listWidget.clear()
             icon = QIcon("resources/pdf.png")
-            has_items: bool = False
-            if is_valid_dir(fname):
-                file_names: List[str] = [f for f in Path(fname).rglob('*.pdf')]
-                
-                if len(file_names) > 0:
-                    [self.listWidget.addItem(QListWidgetItem(icon, str(f))) for f in file_names]
+            fnames = sorted([make_path(f) for f in fnames])
+            for fname in fnames:
+                if is_valid_dir(fname):
+                    file_names: List[str] = [f for f in Path(fname).rglob('*.pdf')]
+                    
+                    if len(file_names) > 0:
+                        [self.listWidget.addItem(QListWidgetItem(icon, str(f))) for f in file_names]
+                        has_items = True
+                    else:
+                        self.listWidget.addItem(QListWidgetItem('No se encontraron archivos PDF en el directorio seleccionado.'))
+                elif fname.endswith('.pdf'):
+                    self.listWidget.addItem(QListWidgetItem(icon, make_path(fname)))
                     has_items = True
-                else:
-                    self.listWidget.addItem(QListWidgetItem('No se encontraron archivos PDF en el directorio seleccionado.'))
-            elif fname.endswith('.pdf'):
-                self.listWidget.addItem(QListWidgetItem(icon, fname))
-                has_items = True
-            else: 
-                self.listWidget.addItem(QListWidgetItem('Archivo no válido. Por favor, seleccione un archivo PDF.'))
+                else: 
+                    self.listWidget.addItem(QListWidgetItem('Archivo no válido. Por favor, seleccione un archivo PDF.'))
         
         if self.lineEdit_2.text() and has_items:
             self.pushButton_3.setEnabled(True)
@@ -87,11 +107,18 @@ class Window(QMainWindow, Ui_MainWindow):
            
     @pyqtSlot()
     def browse_out_dir(self) -> None:
-        fnames: List[str] = self._open_file_dialog(QFileDialog.FileMode.Directory)
-        if fnames and len(fnames) > 0:
-            fname: str = fnames[0]
-            self.lineEdit_2.setText(fname)
+        directory: str = self.lineEdit_2.text() if self.lineEdit_2.text() else ''
+        if not is_valid_dir(directory):
+            directory = f'{directory}/..'
         
+        fname: str = QFileDialog.getExistingDirectory(self, 'Selecciona una carpeta')
+        # fnames: List[str] = self._open_file_dialog(caption = 'Selecciona una carpeta para guardar los archivos procesados',
+        #                                            file_mode = QFileDialog.FileMode.Directory, 
+        #                                            directory = directory)
+        if fname:
+            self.lineEdit_2.setText(fname)
+            self.save_memento()
+            
         if self.lineEdit.text():
             self.pushButton_3.setEnabled(True)
         else:
