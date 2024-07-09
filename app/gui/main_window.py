@@ -80,6 +80,14 @@ class Ui_MainWindow(object):
         self.pushButton.setSizePolicy(sizePolicy)
         self.pushButton.setObjectName("pushButton")
         self.horizontalLayout.addWidget(self.pushButton)
+        self.pushButton_5 = QtWidgets.QPushButton(parent=self.centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.pushButton_5.sizePolicy().hasHeightForWidth())
+        self.pushButton_5.setSizePolicy(sizePolicy)
+        self.pushButton_5.setObjectName("pushButton_5")
+        self.horizontalLayout.addWidget(self.pushButton_5)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
         self.horizontalLayout.addItem(spacerItem)
         self.gridLayout.addLayout(self.horizontalLayout, 0, 0, 1, 1)
@@ -132,6 +140,7 @@ class Ui_MainWindow(object):
         self.lineEdit_3 = QtWidgets.QLineEdit(parent=self.centralwidget)
         self.lineEdit_3.setMinimumSize(QtCore.QSize(600, 0))
         self.lineEdit_3.setMaximumSize(QtCore.QSize(800, 16777215))
+        self.lineEdit_3.setReadOnly(True)
         self.lineEdit_3.setObjectName("lineEdit_3")
         self.horizontalLayout_4.addWidget(self.lineEdit_3)
         self.pushButton_4 = QtWidgets.QPushButton(parent=self.centralwidget)
@@ -179,13 +188,16 @@ class Ui_MainWindow(object):
         self.pushButton_2.clicked.connect(MainWindow.browse_out_dir) # type: ignore
         self.pushButton_3.clicked.connect(MainWindow.process) # type: ignore
         self.pushButton_4.clicked.connect(MainWindow.browse_template) # type: ignore
+        self.pushButton_5.clicked.connect(MainWindow.browse_input_dir) # type: ignore
+        self.checkBox.toggled['bool'].connect(MainWindow.toggled_split) # type: ignore
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "Inspetrio - Informes de Inspección"))
         self.label.setText(_translate("MainWindow", "Archivo/Carpeta"))
-        self.pushButton.setText(_translate("MainWindow", "Buscar"))
+        self.pushButton.setText(_translate("MainWindow", "Archivos"))
+        self.pushButton_5.setText(_translate("MainWindow", "Carpeta"))
         self.label_2.setText(_translate("MainWindow", "Carpeta Destino"))
         self.pushButton_2.setText(_translate("MainWindow", "Buscar"))
         self.label_5.setText(_translate("MainWindow", "Excel Template"))

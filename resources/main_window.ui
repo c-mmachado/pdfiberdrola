@@ -64,7 +64,7 @@
      </widget>
     </item>
     <item row="0" column="0">
-     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,0,0">
+     <layout class="QHBoxLayout" name="horizontalLayout" stretch="0,0,0,0,0">
       <property name="sizeConstraint">
        <enum>QLayout::SetDefaultConstraint</enum>
       </property>
@@ -139,7 +139,20 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Buscar</string>
+         <string>Archivos</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_5">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Carpeta</string>
         </property>
        </widget>
       </item>
@@ -291,6 +304,9 @@
           <width>800</width>
           <height>16777215</height>
          </size>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -462,11 +478,45 @@
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>pushButton_5</sender>
+   <signal>clicked()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>browse_input_dir()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>832</x>
+     <y>15</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>859</x>
+     <y>-5</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>checkBox</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>toggled_split()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>749</x>
+     <y>121</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>950</x>
+     <y>9</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
  <slots>
   <slot>browse_input_files()</slot>
   <slot>browse_out_dir()</slot>
   <slot>process()</slot>
   <slot>browse_template()</slot>
+  <slot>browse_input_dir()</slot>
+  <slot>toggled_split()</slot>
  </slots>
 </ui>
