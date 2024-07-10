@@ -1,37 +1,45 @@
 !define APPNAME "Inspetrio"
 !define COMPANYNAME "Iberdrola"
 !define DESCRIPTION "Inspetrio"
+
 # These three must be integers
 !define VERSIONMAJOR 0
 !define VERSIONMINOR 0
 !define VERSIONBUILD 1
+!define VERSIONPATCH alpha
+
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
 # It is possible to use "mailto:" links in here to open the email client
 # !define HELPURL "http://..." # "Support Information" link
 # !define UPDATEURL "http://..." # "Product Updates" link
 # !define ABOUTURL "http://..." # "Publisher" link
+
 # This is the size (in kB) of all the files copied into "Program Files"
 # !define INSTALLSIZE 7233
+
+# Require user rights on NT6+ (When UAC is turned on). Allowed: none|user|highest|admin
+RequestExecutionLevel user
+
+# The default installation directory. Eg. "$PROGRAMFILES\${COMPANYNAME}\${APPNAME}"
+InstallDir "$PROFILE\${COMPANYNAME}\${APPNAME}" ; 
  
-RequestExecutionLevel user ; Require user rights on NT6+ (When UAC is turned on). Allowed: none|user|highest|admin
- 
-InstallDir "$PROFILE\${COMPANYNAME}\${APPNAME}" ; "$PROGRAMFILES\${COMPANYNAME}\${APPNAME}"
- 
-# rtf or txt file - remember if it is txt, it must be in the DOS text format (\r\n)
+# The application's license file in either .rtf or .txt format. If it is a .txt, it must be in the DOS text format (\r\n)
 # LicenseData "license.rtf"
+
 # This will be in the installer/uninstaller's title bar
 Name "${COMPANYNAME} - ${APPNAME}"
+
+# The installer executable icon
 Icon "../../../resources/iberdrola.ico"
+
+# The output file created by this script
 outFile "Installer.exe"
 
 !include LogicLib.nsh
-
+!include "MUI2.nsh"
 
 # Installer pages
 Page directory
-
-!include "MUI2.nsh"
-# !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\Inspetrio.exe"
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW ModifyRunCheckbox
@@ -46,17 +54,11 @@ SectionEnd
 Function ModifyRunCheckbox
 	SendMessage $mui.FinishPage.Text ${WM_SETTEXT} 0 "STR:$(MUI_FINISHPAGE_TEXT)$\n$\nSe ha creado uno acceso directo en el desktop"
 
-	${IfNot} ${SectionIsSelected} ${SID_MAYBE} ; You could also check if the file exists...
+	${IfNot} ${SectionIsSelected} ${SID_MAYBE} 
 		SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_UNCHECKED} 0
-		EnableWindow $mui.FinishPage.Run 0 ; Or ShowWindow $mui.FinishPage.Run 0
+		EnableWindow $mui.FinishPage.Run 0 
 	${EndIf}
 FunctionEnd
-
-
-
-# Just three pages - license agreement, install location, and installation
-# page license
-# Page instfiles
  
 #!macro VerifyUserIsAdmin
 #UserInfo::GetAccountType
@@ -103,15 +105,16 @@ section "install"
 	# WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "DisplayVersion" "$\"${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONBUILD}$\""
 	# WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "VersionMajor" ${VERSIONMAJOR}
 	# WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "VersionMinor" ${VERSIONMINOR}
+	
 	# There is no option for modifying or repairing the install
 	# WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "NoModify" 1
 	# WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "NoRepair" 1
+	
 	# Set the INSTALLSIZE constant (!defined at the top of this script) so Add/Remove Programs can accurately report the size
 	# WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${COMPANYNAME} ${APPNAME}" "EstimatedSize" ${INSTALLSIZE}
 sectionEnd
  
 # Uninstaller
- 
 function un.onInit
 	SetShellVarContext current
  

@@ -26,14 +26,15 @@ from app.utils.types import TypeUtils
 
 
 class Window(QMainWindow, Ui_MainWindow):
-    _MEMENTO_FILE = 'resources/memento.json'
-    _MAIN_WINDOW_ICON = 'resources/iberdrola.png'
-    _MAIN_WINDOW_LIST_PDF = 'resources/pdf.png'
+    _MEMENTO_FILE = 'resources/ui/memento.json'
+    _MAIN_WINDOW_ICON = 'resources/ui/iberdrola.png'
+    _MAIN_WINDOW_LIST_PDF = 'resources/ui/pdf.png'
     
     class Memento(TypedDict):
         input_files: List[str]
         output_dir: str
         template_file: str
+        split: bool
     
     def __init__(self) -> Self:
         super().__init__()
@@ -83,7 +84,7 @@ class Window(QMainWindow, Ui_MainWindow):
             json.dump({
                 'input_files': self.input_files,
                 'output_dir': self.output_dir,
-                'template_file': self.template_file,
+                'template_file ': self.template_file,
                 'split': self.split
             }, f)
     
