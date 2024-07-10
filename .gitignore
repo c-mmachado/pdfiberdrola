@@ -210,7 +210,4 @@ pip-selfcheck.json
 logs/
 out/
 !config/*
-!dist/Installer/7zExec/7zSD.sfx
-!dist/Installer/7zExec/config.txt
-!dist/Installer/7zExec/manifest.xml
-!dist/Installer/NSIS/nsis-setup.nsi
+!scripts/*
