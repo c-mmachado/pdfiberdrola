@@ -10,9 +10,9 @@ from typing import Dict, List
 # Local Imports
 
 # Constants
-ENV_FILE: str = argv[1] if len(argv) > 1 else "../../config/.env"
-NSIS_SCRIPT: str = argv[2] if len(argv) > 2 else "nsis-setup.nsi"
-CONFIG_TXT: str = argv[3] if len(argv) > 3 else "config.txt"
+ENV_FILE: str = argv[1] if len(argv) > 1 else "../config/.env"
+NSIS_SCRIPT: str = argv[2] if len(argv) > 2 else "../resources/installer/nsis-setup.nsi"
+CONFIG_TXT: str = argv[3] if len(argv) > 3 else "../resources/installer/config.txt"
 
 env_props: Dict[str, int] = {}
 with open(ENV_FILE, 'r') as f:

@@ -1,5 +1,5 @@
 ;!@Install@!UTF-8!
-Title="Inspetrio v0.0.1.alpha"
-BeginPrompt="Do you want to install Inspetrio v0.0.1.alpha?"
+Title="Inspetrio v0.0.1.1"
+BeginPrompt="Do you want to install Inspetrio v0.0.1.1?"
 RunProgram="Installer.exe"
 ;!@InstallEnd@!
