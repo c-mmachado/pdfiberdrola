@@ -4,19 +4,30 @@
 import logging
 import argparse
 from abc import abstractmethod, ABC
-from typing import Callable, Optional, AnyStr, Any, Mapping, Self, Tuple
+from typing import Annotated, Callable, Optional, AnyStr, Any, Mapping, Self, Tuple
 
 # Third-Party Imports
 from packaging.version import Version
+from pydantic import BaseModel, Field
 
 # Local Imports
-from app.config.config import AppSettings, MetaProperties
+from app.utils.paths import is_valid_file
 from app.utils.types import TypeUtils
 
 # Constants
 LOG: logging.Logger = logging.getLogger(__name__)
 SimpleCallable = Callable[[Tuple[Any], Mapping[AnyStr, Any]], Any]
 
+
+class MetaProperties(BaseModel, ABC):
+    name: Annotated[str, Field(..., min_length = 1)]
+    version: Annotated[str, Field(..., min_length = 3, pattern=r'^\d+(\.\d+)?(\.\d+)?(\.\d+)?$')]
+    description: Annotated[Optional[str], Field(None)]
+    author: Annotated[Optional[str], Field(None)]
+    organization: Annotated[Optional[str], Field(None)] 
+    contact: Annotated[Optional[str], Field(None)] 
+    credits: Annotated[Optional[str], Field(None)] 
+    license: Annotated[Optional[str], Field(None)] 
 
 class SimpleCallableMetaInfo:
     """Meta information class for a callable object.
@@ -76,8 +87,6 @@ Status: ${status}'''
                  parser: Optional[argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]] = None,
                  arguments: Optional[Callable[['SimpleCallableMetaInfo'], None]] = None,
                  epilog: bool = False) -> Self:
-        if not func:
-            raise ValueError('func argument cannot be undefined')
         if not TypeUtils.is_callable(func):
             raise ValueError('func argument must be a callable object')
 
@@ -85,7 +94,14 @@ Status: ${status}'''
         self.name: str = properties.name if properties.name else ''
         self.description: str = properties.description if properties.description else ''
         self.version: Version = properties.version if properties.version else None
-        self.epilog: str = properties.license if epilog else ''
+        
+        if properties.license:
+            if is_valid_file(properties.license):
+                with open(properties.license, 'r') as f:
+                    self.epilog: str = f.read()
+            else: 
+                self.epilog: str = properties.license if epilog else ''
+        
         self.parser: argparse.ArgumentParser = parser() if isinstance(parser, Callable) else parser \
             if isinstance(parser, argparse.ArgumentParser) \
             else argparse.ArgumentParser(add_help = True,

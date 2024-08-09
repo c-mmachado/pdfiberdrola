@@ -6,7 +6,7 @@ import re
 import sys
 import errno
 from pathlib import Path
-from typing import List, Tuple
+from typing import AnyStr, List, Tuple
 
 # Third-Party Imports
 
@@ -127,7 +127,7 @@ def is_path(path: str) -> bool:
     else:
         return True
 
-def is_valid_dir(path: str) -> bool:
+def is_valid_dir(path: AnyStr) -> bool:
     """Checks if a file path is a valid directory.
 
     Attempts to verify that the given file path is a valid directory path in the

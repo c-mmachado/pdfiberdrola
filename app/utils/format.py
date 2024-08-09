@@ -100,7 +100,7 @@ def _jsonify(obj: Any) -> Any:
         return None
 
     obj_str = str(obj)
-    obj_str = obj_str[obj_str.index(':') + 1:] if obj_str.startswith('<class') and ':' in obj_str else obj_str
+    obj_str: str = obj_str[obj_str.index(':') + 1:] if obj_str.startswith('<class') and ':' in obj_str else obj_str
     try:
         return json.loads(obj_str)
     except Exception:

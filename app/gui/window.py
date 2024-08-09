@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-import json
 import os
 import sys
+import json
 from pathlib import Path
 from typing import Generator, List, Self, Tuple, TypedDict
 
 # Third-Party Imports
-from PyQt6 import QtWidgets
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem
-from PyQt6.QtCore import pyqtSlot, QDir
+from PySide6 import QtWidgets, QtCore
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QMainWindow, QApplication, QFileDialog, QDialog, QListWidgetItem
+from PySide6.QtCore import QDir
 
 # Local Imports
 from app.config import settings
@@ -88,7 +88,7 @@ class Window(QMainWindow, Ui_MainWindow):
                 'split': self.split
             }, f)
     
-    @pyqtSlot()
+    @QtCore.Slot()
     def browse_input_files(self) -> None:
         directory: str = self.input_files[-1] if len(self.input_files) > 0 else ''
         if not is_valid_dir(directory):
@@ -100,7 +100,7 @@ class Window(QMainWindow, Ui_MainWindow):
         self._resolve_input_files(fnames)
         self._save_memento()
         
-    @pyqtSlot()
+    @QtCore.Slot()
     def browse_input_dir(self) -> None:
         directory: str = self.input_files[-1] if len(self.input_files) > 0 else ''
         if not is_valid_dir(directory):
@@ -146,7 +146,7 @@ class Window(QMainWindow, Ui_MainWindow):
         else: 
             self.pushButton_3.setEnabled(False)
            
-    @pyqtSlot()
+    @QtCore.Slot()
     def browse_out_dir(self) -> None:
         directory: str = self.output_dir if self.output_dir else ''
         fnames: List[str] = self._open_file_dialog(caption = 'Selecciona una carpeta de destino',
@@ -160,10 +160,10 @@ class Window(QMainWindow, Ui_MainWindow):
             
         if self.lineEdit.text():
             self.pushButton_3.setEnabled(True)
-        else:
+        else: 
             self.pushButton_3.setEnabled(False)
     
-    @pyqtSlot()
+    @QtCore.Slot()
     def browse_template(self) -> None:
         directory: str = os.path.dirname(self.template_file) if self.template_file else ''
         fnames: List[str] = self._open_file_dialog(caption = 'Selecciona un archivo Excel',
@@ -174,12 +174,12 @@ class Window(QMainWindow, Ui_MainWindow):
             self.lineEdit_3.setText(self.template_file)
             self._save_memento()
     
-    @pyqtSlot(bool)
+    @QtCore.Slot(bool)
     def toggled_split(self, state: bool) -> None:
         self.split = state
         self._save_memento()
     
-    @pyqtSlot()
+    @QtCore.Slot()
     def process(self) -> None:
         self.label_4.setVisible(False)
         self.pushButton_3.setEnabled(False)
@@ -194,7 +194,7 @@ class Window(QMainWindow, Ui_MainWindow):
         for item in items:
             pdf_path: str = item.text()
             pdf_paths.append(pdf_path)
-            page_count: int= PDFUtils.page_count(pdf_path)
+            page_count: int = PDFUtils.page_count(pdf_path)
             work_count += page_count
         
         work: Generator[Tuple[int, int, ParseResult]] = parse_pdfs(pdfs_path = pdf_paths, 

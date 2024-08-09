@@ -152,8 +152,7 @@ def _main(executable: SimpleCallableMetaInfoMixin,
         LOG.error(ERROR_KEY_INTERRUPT.format(name = __name__), exc_info = True, stack_info = False)
         ret_status = 1
     except Exception as ex:
-        LOG.error(ERROR_UNEXPECTED.format(name = __name__, exception = str(ex)), exc_info = True,
-                     stack_info = False)
+        LOG.error(ERROR_UNEXPECTED.format(name = __name__, exception = str(ex)), exc_info = True, stack_info = False)
         ret_status = 2
     except SystemExit:
         LOG.debug(ERROR_EXIT.format(name = __name__, status = 3), exc_info = True, stack_info = False)
