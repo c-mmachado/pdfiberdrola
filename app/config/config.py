@@ -15,13 +15,15 @@ CONFIG_FILE_PATHS: tuple[str] = ("config/.env", "config/.env.dev", "config/.env.
 
 
 class AppSettings(BaseSettings, MetaProperties):
-    model_config = SettingsConfigDict(env_file = CONFIG_FILE_PATHS,
-                                      env_prefix='APP_',
-                                      env_file_encoding='utf-8',
-                                      env_ignore_empty=True,
-                                      case_sensitive=False,
-                                      extra='ignore')
-    
+    model_config = SettingsConfigDict(
+        env_file=CONFIG_FILE_PATHS,
+        env_prefix="APP_",
+        env_file_encoding="utf-8",
+        env_ignore_empty=True,
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     no_gui: Annotated[Optional[bool], Field(False)]
     excel_template: Annotated[Optional[str], Field(None)]
     excel_template_start_cell: Annotated[Optional[str], Field(None)]

@@ -39,7 +39,9 @@ if not exist !venv! (
     if !choice! == 1 (
         echo Recreating virtual environment...
         rmdir /s /q !venv!
+        echo Virtual environment recreated.
     )
+    echo Virtual environment will not be recreated.
 )
 
 if not exist !venv! (
@@ -50,24 +52,25 @@ if not exist !venv! (
         echo Failed to create virtual environment.
         exit /b 1
     )
+    echo Virtual environment created.
 )
 
 :: Activating the virtual environment and installing dependencies from requirements.txt
-echo Activating virtual environment...
-call !root!\..\.venv\Scripts\activate.bat
-if not errorlevel 0 (
-    echo Failed to activate virtual environment.
-    exit /b 1
-)
+:: echo Activating virtual environment...
+:: call !root!\..\.venv\Scripts\activate.bat
+:: if not errorlevel 0 (
+::    echo Failed to activate virtual environment.
+::    exit /b 1
+:: )
 
 :: Installing dependencies from requirements.txt using pip in the virtual environment
-echo Installing dependencies...
-python -m pip install -r !root!\..\requirements.txt
-if not errorlevel 0 (
-    echo Failed to install dependencies.
-    exit /b 1
-)
-echo Dependencies installed.
+:: echo Installing dependencies...
+:: python -m pip install -r !root!\..\requirements.txt
+:: if not errorlevel 0 (
+::     echo Failed to install dependencies.
+::     exit /b 1
+:: )
+:: echo Dependencies installed.
 
 echo Virtual environment setup complete.
 echo.

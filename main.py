@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
+from sys import path
+from os.path import dirname, realpath
+from importlib import import_module
 
 # Third-Party Imports
 
@@ -9,10 +12,6 @@
 # Constants
 
 if __name__ == "__main__":
-    from sys import path
-    from os.path import dirname, realpath
-    from importlib import import_module
-    
     # Ensures that the current directory is in the path so that module imports work
     # correctly when running the application
     _file: str = dirname(realpath(__file__))

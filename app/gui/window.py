@@ -17,7 +17,7 @@ from PySide6.QtCore import QDir
 from app.config import settings
 from app.core.pdfs import parse_pdfs
 from app.gui.main_window import Ui_MainWindow
-from app.model.parser import ParseResult
+from app.model.layout import ParseResult
 from app.utils.paths import is_valid_dir, is_valid_file, make_path
 from app.utils.pdfs import PDFUtils
 from app.utils.types import TypeUtils

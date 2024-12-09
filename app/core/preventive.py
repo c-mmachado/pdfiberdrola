@@ -12,7 +12,7 @@ import pandas
 from pdfminer.layout import LTComponent, LTPage, LTTextContainer, LTTextBoxHorizontal, LTTextLineHorizontal, LTRect
 
 # Local Imports
-from app.model.parser import PDFType, ParseResult, ParseState
+from app.model.layout import PDFType, ParseResult, ParseState
 from app.model.pdfs import PDFLayoutContainer, PDFLayoutElement
 from app.utils.pdfs import PDFLayoutUtils, PDFUtils
 from app.utils.types import TypeUtils

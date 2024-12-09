@@ -20,16 +20,19 @@ SimpleCallable = Callable[[Tuple[Any], Mapping[AnyStr, Any]], Any]
 
 
 class MetaProperties(BaseModel, ABC):
-    name: Annotated[str, Field(..., min_length = 1)]
-    version: Annotated[str, Field(..., min_length = 3, pattern=r'^\d+(\.\d+)?(\.\d+)?(\.\d+)?$')]
+    name: Annotated[str, Field(..., min_length=1)]
+    version: Annotated[
+        str, Field(..., min_length=3, pattern=r"^\d+(\.\d+)?(\.\d+)?(\.\d+)?$")
+    ]
     description: Annotated[Optional[str], Field(None)]
     author: Annotated[Optional[str], Field(None)]
-    organization: Annotated[Optional[str], Field(None)] 
-    contact: Annotated[Optional[str], Field(None)] 
-    credits: Annotated[Optional[str], Field(None)] 
-    license: Annotated[Optional[str], Field(None)] 
+    organization: Annotated[Optional[str], Field(None)]
+    contact: Annotated[Optional[str], Field(None)]
+    credits: Annotated[Optional[str], Field(None)]
+    license: Annotated[Optional[str], Field(None)]
 
-class SimpleCallableMetaInfo:
+
+class SimpleCallableMetaInfo(object):
     """Meta information class for a callable object.
 
     Wrapper for any meta information required to provide a useful help message
@@ -50,7 +53,7 @@ class SimpleCallableMetaInfo:
         whether to include the license information in the help message, by default False
     parser : argparse.ArgumentParser
         an `argparse.ArgumentParser` object or a callable returning one for the wrapped callable object's argument resolution
-    
+
     Parameters
     ----------
     func : SimpleCallable
@@ -67,7 +70,7 @@ class SimpleCallableMetaInfo:
         whether to include the license information in the help message, by default False
     """
 
-    _DEFAULT_DESC = '''
+    _DEFAULT_DESC = """
 ${name} -- v${version}
 
 ${description}
@@ -76,39 +79,48 @@ Authors: ${author}
 Organizations: ${organization}
 Contacts: ${contact}
 Credits: ${credits}
-Status: ${status}'''
+Status: ${status}"""
 
-
-    def __init__(self,
-                 func: SimpleCallable,
-                 *,
-                 prog: str,
-                 properties: MetaProperties,
-                 parser: Optional[argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]] = None,
-                 arguments: Optional[Callable[['SimpleCallableMetaInfo'], None]] = None,
-                 epilog: bool = False) -> Self:
+    def __init__(
+        self,
+        func: SimpleCallable,
+        *,
+        prog: str,
+        properties: MetaProperties,
+        parser: Optional[
+            argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]
+        ] = None,
+        arguments: Optional[Callable[["SimpleCallableMetaInfo"], None]] = None,
+        epilog: bool = False,
+    ) -> Self:
         if not TypeUtils.is_callable(func):
-            raise ValueError('func argument must be a callable object')
+            raise ValueError("func argument must be a callable object")
 
         self.prog: str = prog
-        self.name: str = properties.name if properties.name else ''
-        self.description: str = properties.description if properties.description else ''
+        self.name: str = properties.name if properties.name else ""
+        self.description: str = properties.description if properties.description else ""
         self.version: Version = properties.version if properties.version else None
-        
+
         if properties.license:
             if is_valid_file(properties.license):
-                with open(properties.license, 'r') as f:
+                with open(properties.license, "r") as f:
                     self.epilog: str = f.read()
-            else: 
-                self.epilog: str = properties.license if epilog else ''
-        
-        self.parser: argparse.ArgumentParser = parser() if isinstance(parser, Callable) else parser \
-            if isinstance(parser, argparse.ArgumentParser) \
-            else argparse.ArgumentParser(add_help = True,
-                                         prog = self.prog,
-                                         description = self.description,
-                                         epilog = self.epilog if epilog else '',
-                                         formatter_class = argparse.RawDescriptionHelpFormatter)
+            else:
+                self.epilog: str = properties.license if epilog else ""
+
+        self.parser: argparse.ArgumentParser = (
+            parser()
+            if isinstance(parser, Callable)
+            else parser
+            if isinstance(parser, argparse.ArgumentParser)
+            else argparse.ArgumentParser(
+                add_help=True,
+                prog=self.prog,
+                description=self.description,
+                epilog=self.epilog if epilog else "",
+                formatter_class=argparse.RawDescriptionHelpFormatter,
+            )
+        )
         arguments(self) if isinstance(arguments, Callable) else None
 
 
@@ -122,7 +134,6 @@ class SimpleCallableMetaInfoMixin(ABC):
     """
 
     __meta__: SimpleCallableMetaInfo
-
 
     @abstractmethod
     def __call__(self, *args: Tuple[Any], **kwargs: Mapping[AnyStr, Any]) -> Any:

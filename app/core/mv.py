@@ -11,7 +11,7 @@ import pandas
 from pdfminer.layout import LTTextBoxHorizontal, LTPage, LTRect, LTCurve, LTLine
 
 # Local Imports
-from app.model.parser import PDFType, ParseResult, ParseState
+from app.model.layout import PDFType, ParseResult, ParseState
 from app.model.pdfs import PDFLayoutElement, PDFLayoutLine, PDFLayoutRect
 from app.utils.pdfs import PDFLayoutUtils
 
@@ -136,6 +136,8 @@ def _parse_mv_pdf_page(pdf_page: LTPage, state: ParseState, parse_result: ParseR
         parse_result['RevisionDate'] = line[1].children[0].element.get_text().strip() if len(line) > 1 and len(line[1].children) > 0 else None
         parse_result['ApprovalDate'] = line[2].children[0].element.get_text().strip() if len(line) > 2 and len(line[2].children) > 0 else None
     else:
+        LOG.debug(f'Parsing page {pdf_page.pageid}')
+        
         while (line := next(lines_iter, None)) != None:
             if len(line) > 0 and isinstance(line[0], PDFLayoutRect) and len(line[0].children) > 0:
                 text: str = line[0].children[0].element.get_text().strip()
@@ -191,11 +193,12 @@ def _parse_mv_pdf_page(pdf_page: LTPage, state: ParseState, parse_result: ParseR
             measures: Dict[str, Any] = parse_task['Elements'][state['element']]['Measures']
             
             if isinstance(el, PDFLayoutRect):
-                split: List[str] = el.children[0].element.get_text().strip().split()
-                measures[state['subelement']] = {
-                    'Value': split[0] if split else None,
-                    'Unit': split[1] if split and len(split) > 1 else None
-                }
+                if len(el.children) > 0:
+                    split: List[str] = el.children[0].element.get_text().strip().split()
+                    measures[state['subelement']] = {
+                        'Value': split[0] if split else None,
+                        'Unit': split[1] if split and len(split) > 1 else None 
+                    }
                 state['subelement'] = None
             else:
                 text: str = el.element.get_text().strip()
