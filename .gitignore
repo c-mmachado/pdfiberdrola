@@ -211,3 +211,4 @@ logs/
 out/
 !config/*
 !scripts/*
+resources/ui/memento.json
