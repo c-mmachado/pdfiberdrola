@@ -2,7 +2,7 @@
 
 # Python Imports
 import os
-import logging
+from logging import Logger, getLogger
 from tempfile import TemporaryDirectory
 from typing import Iterator, List, Tuple
 
@@ -27,7 +27,7 @@ from app.utils.files import create_dir
 from app.utils.paths import is_valid_dir, remove_extension
 
 # Constants
-LOG: logging.Logger = logging.getLogger(__name__)
+LOG: Logger = getLogger(__name__)
 
 
 class PDFBBoxHighlighter(object):

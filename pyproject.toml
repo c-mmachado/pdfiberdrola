@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [tool.poetry]
 name = "inspetrio"
-version = "0.0.1"
+version = "0.4.3"
 description = "Inspetrio is a desktop app that parses PDF files and converts the data into Excel documents, following a predefined template for streamlined reporting."
 license = "MIT"
 readme = "README.md"
@@ -45,16 +45,9 @@ python = ">=3.12,<3.14"
 "pdfminer.six" = "^20240706"
 pydantic-settings = "^2.5.2"
 packaging = "^24.1"
-numpy = "^2.1.1"
 pandas = "^2.2.3"
 openpyxl = "^3.1.5"
-xlrd = "^2.0.1"
-pillow = "^10.4.0"
 pypdf = "^5.0.1"
-pdf2image = "^1.17.0"
-shapely = "^2.0.6"
-scikit-learn = "^1.5.2"
-matplotlib = "^3.9.2"
 pyside6 = "^6.8.0.2"
 
 [tool.poetry.group.dev.dependencies]
@@ -62,6 +55,12 @@ ruff = "^0.6.8"
 nuitka = "^2.4.8"
 hypothesis = "^6.114.1"
 pytest = "^8.3.3"
+poethepoet = "^0.31.1"
 
-[tool.poetry.scripts]
-tests = "scripts.run:run"
+[tool.poetry.group.plot.dependencies]
+matplotlib = "^3.10.0"
+pdf2image = "^1.17.0"
+pillow = "^10.4.0"
+
+[tool.poe.tasks]
+tests = "pytest -v tests"

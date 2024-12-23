@@ -1,35 +1,32 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-import os
-import shutil
-import logging
+from os.path import basename
+from shutil import copyfile
+from logging import getLogger, Logger
 from pathlib import Path
-from typing import AnyStr, Dict, Generator, Iterator, List, Tuple
+from typing import Any, AnyStr, Dict, Generator, Iterator, List, Tuple
 
 # Third-Party Imports
 from pandas import DataFrame, ExcelWriter
 from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
-from pdfminer.layout import LTPage, LTLine, LTComponent
+from pdfminer.layout import LTPage, LAParams
 
 # Local Imports
 from app.config import settings
 from app.core import preventive
 from app.core import mv
-from app.core.highlighter import PDFBBoxHighlighter
-from app.core.mv import parse_mv_pdf
-from app.core.preventive import parse_preventive_pdf
-from app.core.layout import PDFLayoutComposer
-from app.model.layout import PDFParseException, PDFType, ParseResult
-from app.model.pdfs import PDFLayoutElement, PDFLayoutPage
+from app.core.mv import match_mv_pdf
+from app.core.preventive import match_prev_pdf, parse_preventive_pdf
+from app.model.pdfs import PDFType, PDFLTMatchException, PDFLTMatchResult
 from app.utils.paths import is_valid_dir, is_valid_file, make_path, remove_extension
 from app.utils.files import create_dir, is_pdf_file
 from app.utils.pdfs import PDFUtils
-from app.utils.excel import ExcelCell, ExcelUtils
+from app.utils.excel import ExcelUtils, ExcelCell
 
 # Constants
-LOG: logging.Logger = logging.getLogger(__name__)
+LOG: Logger = getLogger(__name__)
 
 
 def _resolve_pdf_type(first_page: PageObject) -> PDFType:
@@ -45,27 +42,29 @@ def _resolve_pdf_type(first_page: PageObject) -> PDFType:
 
 def parse_pdf(
     pdf_path: str, dataframe: Dict[PDFType, DataFrame]
-) -> Generator[ParseResult | Exception, None, None]:
+) -> Generator[PDFLTMatchResult | Exception, None, None]:
     LOG.debug(f"Starting parsing of '{pdf_path}'...")
 
+    # Checks if file is of PDF type
     if not is_pdf_file(f"{pdf_path}"):
         LOG.debug(f"File '{pdf_path}' is not of PDF type. Skipping...")
-        yield PDFParseException(f"File '{pdf_path}' is not of PDF type")
+        yield PDFLTMatchException(f"File '{pdf_path}' is not of PDF type")
         return
     LOG.debug(f"File '{pdf_path}' is of PDF type. Proceeding...")
 
     LOG.debug("Resolving PDF type...")
     pdf_reader = PdfReader(pdf_path)
     pdf_pages: List[PageObject] = pdf_reader.pages
-    parse_result: ParseResult = {}
-    parse_result["Type"] = _resolve_pdf_type(pdf_pages[0])
-    LOG.debug(f'Resolved PDF type: {parse_result["Type"]}')
+    match_result: PDFLTMatchResult = {"Tasks": {}}
+    match_result["Type"] = _resolve_pdf_type(pdf_pages[0])
+    LOG.debug(f'Resolved PDF type: {match_result["Type"]}')
 
-    pdf_pages_iter: Iterator[LTPage] = extract_pages(pdf_path)
+    # pdf_pages_iter: Iterator[LTPage] = extract_pages(
+    #     pdf_path, laparams=LAParams(char_margin=1.0)
+    # )
     # first_page: LTPage = next(pdf_pages_iter)
     # parser: PDFLayoutComposer = PDFLayoutComposer(first_page)
     # highlighter = PDFBBoxHighlighter()
-
     # first_page._objs.sort(key=lambda x: (-x.y0, x.x0))
     # pdf_elements: List[LTComponent] = []
     # for i, el in enumerate(first_page._objs):
@@ -79,25 +78,48 @@ def parse_pdf(
     #         dpi=500,
     #         individual=False,
     #     )
-        # pdf_elements.append(PDFLayoutElement(element))
+    # pdf_elements.append(PDFLayoutElement(element))
 
     # yield parse_result
 
     # while (page := next(pdf_pages_iter, None)) != None:
     #     root: PDFLayoutPage = _sort_pdf_page_elements(page)
 
-    match parse_result["Type"]:
+    match match_result["Type"]:
         case PDFType.PREVENTIVE:
-            yield from parse_preventive_pdf(
-                pdf_pages_iter, parse_result, pdf_path, dataframe[PDFType.PREVENTIVE]
-            )
+            pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(pdf_path)
+            pdf_form_field_raw: List[Any] = PDFUtils.load_form_fields_raw(pdf_path)
+
+            if pdf_form_fields and pdf_form_field_raw:
+                pdf_pages_iter: Iterator[LTPage] = extract_pages(
+                    pdf_path, laparams=LAParams(char_margin=0.8, line_margin=0.4)
+                )
+
+                yield from parse_preventive_pdf(
+                    pdf_pages_iter,
+                    match_result,
+                    pdf_path,
+                    dataframe[PDFType.PREVENTIVE],
+                    pdf_form_fields,
+                    pdf_form_field_raw,
+                )
+            else:
+                yield from match_prev_pdf(
+                    pdf_path,
+                    match_result,
+                    dataframe[PDFType.PREVENTIVE],
+                    pdf_form_fields,
+                )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case PDFType.MV:
-            yield from parse_mv_pdf(pdf_pages_iter, parse_result, dataframe[PDFType.MV])
+            pdf_pages_iter: Iterator[LTPage] = extract_pages(
+                pdf_path, laparams=LAParams(char_margin=1.0)
+            )
+            yield from match_mv_pdf(pdf_pages_iter, match_result, dataframe[PDFType.MV])
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case _:
             LOG.debug("Unknown PDF type")
-            yield PDFParseException(f"Unknown PDF type for '{pdf_path}'")
+            yield PDFLTMatchException(f"Unknown PDF type for '{pdf_path}'")
 
 
 def parse_pdf_gen(
@@ -107,7 +129,7 @@ def parse_pdf_gen(
     out_path: AnyStr,
     excel_cell: ExcelCell,
     df: Dict[PDFType, DataFrame],
-) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
+) -> Generator[Tuple[int, int, PDFLTMatchResult | Exception], None, None]:
     page_count: int = PDFUtils.page_count(pdf_path)
     page_num = 0
 
@@ -115,10 +137,12 @@ def parse_pdf_gen(
         file_path: str = make_path(f"{pdf_path}")
         LOG.debug(f"Processing file '{file_path}'...")
 
-        page_gen: Generator[ParseResult | Exception] = parse_pdf(f"{file_path}", df)
+        page_gen: Generator[PDFLTMatchResult | Exception] = parse_pdf(
+            f"{file_path}", df
+        )
         while True:
             try:
-                parse_result: ParseResult | Exception = next(page_gen)
+                parse_result: PDFLTMatchResult | Exception = next(page_gen)
                 page_num += 1
                 if isinstance(parse_result, Exception):
                     raise parse_result
@@ -147,9 +171,7 @@ def parse_pdf_gen(
         LOG.error(f"Error while parsing file '{file_path}':\n {e}")
         error_dir: str = make_path(f"{out_dir}/error")
         if create_dir(error_dir, raise_error=False):
-            shutil.copyfile(
-                f"{file_path}", f"{error_dir}/{os.path.basename(file_path)}"
-            )
+            copyfile(f"{file_path}", f"{error_dir}/{basename(file_path)}")
         yield (page_num, page_count, e)
 
 
@@ -169,7 +191,7 @@ def resolve_file_output(
 
         if not is_valid_file(out_file) or overwrite:
             LOG.debug(f"Copying Excel template to '{out_file}'...")
-            shutil.copyfile(excel_template, out_file)
+            copyfile(excel_template, out_file)
         else:
             LOG.debug(
                 f"Excel template '{excel_template}' already exists. Using it as output file..."
@@ -177,7 +199,7 @@ def resolve_file_output(
         excel_template_path = out_file
         LOG.debug(f"Excel template copied to '{excel_template_path}'")
     else:
-        out_file_name: str = remove_extension(os.path.basename(file_path))
+        out_file_name: str = remove_extension(basename(file_path))
         out_file_dir: str = make_path(f"{out_dir}/{out_file_name}")
 
         LOG.debug(
@@ -188,7 +210,7 @@ def resolve_file_output(
 
         out_file: str = make_path(f"{out_file_dir}/{out_file_name}.xlsx")
         LOG.debug(f"Copying Excel template to '{out_file}'...")
-        shutil.copyfile(excel_template, out_file)
+        copyfile(excel_template, out_file)
         excel_template_path = out_file
         LOG.debug(f"Excel template copied to '{excel_template_path}'")
     return excel_template_path
@@ -232,14 +254,14 @@ def parse_pdfs(
     split: bool = False,
     excel_template: AnyStr = settings().excel_template,
     excel_template_cell: ExcelCell = settings().excel_template_start_cell,
-) -> Generator[Tuple[int, int, ParseResult | Exception], None, None]:
+) -> Generator[Tuple[int, int, PDFLTMatchResult | Exception], None, None]:
     LOG.debug(
         f"Parsing PDFs from '{pdfs_path}' to '{out_dir}' using template '{excel_template}'..."
     )
 
-    setup_output(out_dir)
-
     try:
+        setup_output(out_dir)
+
         files: Generator[Tuple[str, str], bool] = resolve_files(
             pdfs_path, out_dir, excel_template, split
         )
@@ -256,8 +278,6 @@ def parse_pdfs(
         idx = 0
         while True:
             try:
-                f: str
-                o: str
                 next(files)
                 f, o = files.send(True if idx == 0 else False)
                 idx += 1

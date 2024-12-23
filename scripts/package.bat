@@ -15,10 +15,10 @@ set VENV_DIR=!root!\..\.venv
 
 set PROJECT_ROOT=!root!\..
 set PROJECT_RESOURCES_DIR=!PROJECT_ROOT!\resources
-set PROJECT_RESOURCES_UI_DIR=!PROJECT_ROOT!\resources\ui
 set PROJECT_DIST_DIR=!PROJECT_ROOT!\dist
 set PROJECT_CONFIG_DIR=!PROJECT_ROOT!\config
-set PROJECT_TEMPLATES_DIR=!PROJECT_ROOT!\templates
+set PROJECT_RESOURCES_UI_DIR=!PROJECT_RESOURCES_DIR!\gui
+set PROJECT_TEMPLATES_DIR=!PROJECT_RESOURCES_DIR!\templates
 
 set PROJECT_NAME=Inspetrio
 set PROJECT_MAIN=!PROJECT_ROOT!\main.py
@@ -27,7 +27,7 @@ set PROJECT_ICON=!PROJECT_RESOURCES_UI_DIR!\iberdrola.ico
 :: Resolves the Nuitka output directories
 set NUITKA_OUT_DIR=!PROJECT_DIST_DIR!\Nuitka\Inspetrio
 set NUITKA_DIST_DIR=!NUITKA_OUT_DIR!\main.dist
-set NUITKA_RESOURCES_DIR=!NUITKA_DIST_DIR!\resources\ui
+set NUITKA_RESOURCES_DIR=!NUITKA_DIST_DIR!\resources\gui
 set NUITKA_CONFIG_DIR=!NUITKA_DIST_DIR!\config
 set NUITKA_TEMPLATES_DIR=!NUITKA_DIST_DIR!\templates
 set NUITKA_LOGS_DIR=!NUITKA_DIST_DIR!\logs
@@ -51,7 +51,7 @@ echo Environment variables set successfully
 
 :: Compiles the application using Nuitka and generate the application executable
 if not exist !NUITKA_DIST_DIR!\!NUITKA_EXE_NAME! (
-    !VENV_DIR!/Scripts/python -m nuitka --standalone --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyqt6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
+    !VENV_DIR!/Scripts/python -m nuitka --standalone --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyside6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
         echo Nuitka compilation successful
     ) || (
         echo Error: Nuitka compilation failed && goto eof

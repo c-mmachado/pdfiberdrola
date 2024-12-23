@@ -53,6 +53,19 @@ if not exist !venv! (
         exit /b 1
     )
     echo Virtual environment created.
+
+    :: Update pip installation in the virtual environment
+    echo Updating pip...
+    call !venv!\Scripts\activate.bat
+    python -m pip install --upgrade pip
+    if not errorlevel 0 (
+        echo Failed to update pip.
+        exit /b 1
+    )
+    echo Pip updated.
+    echo Deactivating virtual environment...
+    deactivate
+    echo Deactivated virtual environment.
 )
 
 :: Activating the virtual environment and installing dependencies from requirements.txt
@@ -71,6 +84,8 @@ if not exist !venv! (
 ::     exit /b 1
 :: )
 :: echo Dependencies installed.
+
+:: poetry install --no-root --only main
 
 echo Virtual environment setup complete.
 echo.

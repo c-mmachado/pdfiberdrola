@@ -4,7 +4,17 @@
 import logging
 import argparse
 from abc import abstractmethod, ABC
-from typing import Annotated, Callable, Optional, AnyStr, Any, Mapping, Self, Tuple
+from typing import (
+    Annotated,
+    Callable,
+    List,
+    Optional,
+    AnyStr,
+    Any,
+    Mapping,
+    Self,
+    Tuple,
+)
 
 # Third-Party Imports
 from packaging.version import Version
@@ -29,7 +39,14 @@ class MetaProperties(BaseModel, ABC):
     organization: Annotated[Optional[str], Field(None)]
     contact: Annotated[Optional[str], Field(None)]
     credits: Annotated[Optional[str], Field(None)]
+
+    homepage: Annotated[Optional[str], Field(None)]
+    repository: Annotated[Optional[str], Field(None)]
+    documentation: Annotated[Optional[str], Field(None)]
     license: Annotated[Optional[str], Field(None)]
+    readme: Annotated[Optional[str | List[str]], Field(None)]
+    authors: Annotated[Optional[List[str]], Field(None)]
+    maintainers: Annotated[Optional[List[str]], Field(None)]
 
 
 class SimpleCallableMetaInfo(object):

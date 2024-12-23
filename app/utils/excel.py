@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-import logging
+from logging import getLogger, Logger
 from typing import Dict, Literal, Sequence, Tuple, final
 
 # Third-Party Imports
-import pandas
+from pandas import DataFrame, ExcelWriter, read_excel as p_read_excel
 
 # Local Imports
 from app.utils.types import Final
 
 # Constants
-LOG: logging.Logger = logging.getLogger(__name__)
+LOG: Logger = getLogger(__name__)
 ExcelCell = Tuple[int, int]
 ExcelEngineName = Literal["xlsxwriter", "openpyxl"]
 
@@ -33,13 +33,13 @@ class ExcelUtils(Final):
     def append_to_excel(
         *,
         file_path: str,
-        df: pandas.DataFrame,
+        df: DataFrame,
         engine: ExcelEngineName = "openpyxl",
         sheet_name: str,
         mode: str = "a",
         start_cell: ExcelCell = (0, 0),
     ) -> None:
-        with pandas.ExcelWriter(
+        with ExcelWriter(
             file_path, engine=engine, if_sheet_exists="overlay", mode=mode
         ) as writer:
             df.to_excel(
@@ -58,14 +58,15 @@ class ExcelUtils(Final):
         columns: Dict[str, Sequence[str]],
         sheet_names: Sequence[str],
         start_cell: ExcelCell = (1, 1),
-    ) -> Dict[str, pandas.DataFrame]:
-        df: Dict[str, pandas.DataFrame] = pandas.read_excel(
+    ) -> Dict[str, DataFrame]:
+        df: Dict[str, DataFrame] = p_read_excel(
             file_path,
             header=None,  # start_cell[1] - 1,
             usecols=lambda x: isinstance(x, int) and x >= start_cell[0] - 1,
             index_col=None,  # [start_cell[0] - 1],
             skiprows=start_cell[1],
             sheet_name=sheet_names,
+            engine="openpyxl",
         )
         for k in df.keys():
             if df[k].empty:
