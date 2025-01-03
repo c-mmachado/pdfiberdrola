@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.poetry]
+name = "inspetrio"
+version = "0.4.9"
+description = "Inspetrio is a desktop app that parses PDF files and converts the data into Excel documents, following a predefined template for streamlined reporting."
+license = "MIT"
+readme = "README.md"
+homepage = "https://python-poetry.org/"
+repository = "https://github.com/python-poetry/poetry"
+documentation = "https://python-poetry.org/docs/"
+keywords = [
+    "PDF",
+    "Excel",
+    "Excel Template",
+    "Windows",
+    "Desktop Application",
+    "Data Retrieval",
+]
+authors = ["Carlos Machado <carlos.machado@laude.tech>"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Natural Language :: Spanish",
+    "Natural Language :: Portuguese",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Documentation :: Sphinx",
+]
+package-mode = false
+packages = [{ include = "scripts" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.14"
+"pdfminer.six" = "^20240706"
+pydantic-settings = "^2.5.2"
+packaging = "^24.1"
+pandas = "^2.2.3"
+openpyxl = "^3.1.5"
+pypdf = "^5.0.1"
+pyside6 = "^6.8.0.2"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.8"
+nuitka = "^2.4.8"
+hypothesis = "^6.114.1"
+pytest = "^8.3.3"
+poethepoet = "^0.31.1"
+
+[tool.poetry.group.plot.dependencies]
+matplotlib = "^3.10.0"
+pdf2image = "^1.17.0"
+pillow = "^10.4.0"
+
+[tool.poe.tasks]
+tests = "pytest -v tests"

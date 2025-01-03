@@ -8,37 +8,48 @@ from typing import List, Callable, AnyStr, Optional
 # Third-Party Imports
 
 # Local Imports
-from app.config.config import AppSettings
-from app.utils.callables.meta_mixin import SimpleCallableMetaInfoMixin, SimpleCallableMetaInfo, SimpleCallable
+from app.utils.callables.meta_mixin import (
+    MetaProperties,
+    SimpleCallableMetaInfoMixin,
+    SimpleCallableMetaInfo,
+    SimpleCallable,
+)
 from app.utils.callables.entry_points import main
 
 # Constants
 
-def meta(*,
-         prog: str,
-         properties: AppSettings,
-         epilog: bool = False,
-         parser: Optional[argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]] = None,
-         arguments: Optional[Callable[[SimpleCallableMetaInfo], None]]) -> Callable[[Callable], SimpleCallableMetaInfoMixin]:
+
+def meta(
+    *,
+    prog: str,
+    properties: MetaProperties,
+    epilog: bool = False,
+    parser: Optional[
+        argparse.ArgumentParser | Callable[[], argparse.ArgumentParser]
+    ] = None,
+    arguments: Optional[Callable[[SimpleCallableMetaInfo], None]],
+) -> Callable[[Callable], SimpleCallableMetaInfoMixin]:
     def wrapper(func: Callable) -> SimpleCallableMetaInfoMixin:
         @functools.wraps(func)
         def decorate() -> SimpleCallableMetaInfoMixin:
-            func.__meta__ = SimpleCallableMetaInfo(func,
-                                                   prog = prog,
-                                                   properties = properties,
-                                                   epilog = epilog,
-                                                   parser = parser,
-                                                   arguments = arguments)
+            func.__meta__ = SimpleCallableMetaInfo(
+                func,
+                prog=prog,
+                properties=properties,
+                epilog=epilog,
+                parser=parser,
+                arguments=arguments,
+            )
             return func
 
-
         return decorate()
-
 
     return wrapper
 
 
-def entry_point(argv: List[AnyStr]) -> Callable[[SimpleCallableMetaInfoMixin], SimpleCallable]:
+def entry_point(
+    argv: List[AnyStr],
+) -> Callable[[SimpleCallableMetaInfoMixin], SimpleCallable]:
     """Declares a manually callable program entry point.
 
     Decorator meant to annotate methods also annotated with the meta decorator
@@ -61,14 +72,14 @@ def entry_point(argv: List[AnyStr]) -> Callable[[SimpleCallableMetaInfoMixin], S
         def decorate() -> int:
             return main(func, argv)
 
-
         return decorate
-
 
     return wrapper
 
 
-def auto_entry_point(argv: List[AnyStr]) -> Callable[[SimpleCallableMetaInfoMixin], int]:
+def auto_entry_point(
+    argv: List[AnyStr],
+) -> Callable[[SimpleCallableMetaInfoMixin], int]:
     """Declares an auto executing program entry point.
 
     Decorator meant to annotate methods also annotated with the meta decorator
@@ -91,8 +102,6 @@ def auto_entry_point(argv: List[AnyStr]) -> Callable[[SimpleCallableMetaInfoMixi
         def decorate() -> int:
             return main(func, argv)
 
-
         return decorate()
-
 
     return wrapper
