@@ -34,7 +34,7 @@ LineIntersect = Tuple[Point, float, float, float]
 
 
 class PDFLTException(Exception):
-    def __init__(self: Self, status: int, reason: str, exception: Exception) -> None:
+    def __init__(self: Self, status: int = 1, reason: str = '', exception: Exception = None) -> None:
         super().__init__(reason)
 
 
@@ -86,22 +86,8 @@ class BBox(object):
         return f"{self.x0}, {self.y0}, {self.x1}, {self.y1}"
 
 
-class PDFFormFields(object):
-    def __init__(self: Self, fields: List[Dict[str, Any]]) -> None:
-        self._fields: List[Dict[str, Any]] = fields
-
-    def __getitem__(self: Self, key: str) -> Any:
-        return [f for f in self._fields if f.get("T") == key]
-
-    def __iter__(self: Self) -> Any:
-        return iter(self._fields)
-
-    def __len__(self: Self) -> int:
-        return len(self._fields)
-
-    def __repr__(self: Self) -> str:
-        return "<%s(%d)>" % (self.__class__.__name__, len(self._fields))
-
+PDFFormField = Dict[str, Any]
+PDFFormFields = Dict[str, PDFFormField]
 
 @final
 class PDFUtils(Final):
@@ -159,6 +145,33 @@ class PDFUtils(Final):
             }
             LOG.debug(f"Loaded PDF form fields: {len(fields)}")
             return fields
+        
+    @staticmethod
+    def load_form_fields_v2(pdf_path: str) -> PDFFormFields | None:
+        LOG.debug("Loading PDF form fields...")
+
+        with open(pdf_path, "rb") as file:
+            parser = PDFParser(file)
+            doc = PDFDocument(parser)
+            parser.set_document(doc)
+
+            catalog: Dict[Any, Any] = resolve1(doc.catalog)
+            if PDFUtils.ACRO_FORM not in catalog:
+                LOG.debug(
+                    f"No 'AcroForm' field found in document catalog for PDF at '{pdf_path}'"
+                )
+                return None
+
+            acro_form: List[PDFObjRef] = resolve1(doc.catalog[PDFUtils.ACRO_FORM])[
+                PDFUtils.ACRO_FORM_FIELDS
+            ]
+            fields: List[PDFFormField] = [f.resolve() for f in acro_form]
+            LOG.debug(f"Loaded PDF form fields: {len(fields)}")
+            
+            return {
+                f.get("T"): f
+                for f in sorted([PDFUtils._decode_form_field(f) for f in acro_form], key=lambda x: x.get("T"))
+            }
 
     @staticmethod
     def load_form_fields_raw(pdf_path: str) -> List[Any] | None:
@@ -190,6 +203,12 @@ class PDFUtils(Final):
         if TypeUtils.is_iterable(field) and not isinstance(field, list):
             for attr in [a for a in field if a in ["T", "V", "Kids", "P"]]:
                 field[attr] = PDFUtils._decode_form_field(field.get(attr))
+                
+                if attr == "Kids":
+                    field['Kids'] = {
+                        f.get("T"): f
+                        for f in field['Kids']
+                    }
         elif isinstance(field, list):
             field = [PDFUtils._decode_form_field(v) for v in field]
         else:

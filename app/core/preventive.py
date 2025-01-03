@@ -33,7 +33,7 @@ from app.model.pdfs import (
     PDFLTMatchResult,
 )
 from app.model.pdfs import PDFLTContainer, PDFLTComponent
-from app.utils.pdfs import PDFLayoutUtils, PDFUtils
+from app.utils.pdfs import PDFLayoutUtils, PDFUtils, PDFFormFields, PDFFormField
 from app.utils.types import TypeUtils
 
 # Constants
@@ -69,7 +69,7 @@ def match_prev_pdf(
     pdf_path: str,
     match_result: PDFLTMatchResult,
     df: DataFrame,
-    pdf_form_fields: Dict[str, Any] | None,
+    pdf_form_fields: PDFFormFields | None,
 ) -> Generator[PDFLTMatchResult, None, None]:
     LOG.debug(f"Matching {PDFType.PREVENTIVE} PDF...")
 
@@ -100,18 +100,131 @@ def match_prev_pdf(
 
         yield match_result
 
+    _fill_dataframe(match_result, df)
+
+
+def _fill_dataframe(match_result: PDFLTMatchResult, df: DataFrame) -> None:
+    for task in match_result["Tasks"]:
+        for task_el in match_result["Tasks"][task]["Elements"]:
+            for el_el in match_result["Tasks"][task]["Elements"][task_el]["Elements"]:
+                df.loc[-1] = [
+                    match_result["WTG"],
+                    match_result["YearAnnualService"],
+                    match_result["BeginningDate"],
+                    match_result["FinishDate"],
+                    match_result["Code"],
+                    match_result["Rev.:"],
+                    match_result["Date"],
+                    "OK" if match_result["SignatureSGRE"] else "NO OK",
+                    "OK" if match_result["Signature"] else "NO OK",
+                    match_result["Tasks"][task]["WTGSection"],
+                    match_result["Tasks"][task]["Elements"][task_el]["TaskCode/Name"],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "TaskCode"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Description"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Status"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Comment"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "MORS"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Measurement"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Unit"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Min"
+                    ],
+                    match_result["Tasks"][task]["Elements"][task_el]["Elements"][el_el][
+                        "Max"
+                    ],
+                    None,
+                    None,
+                    None,
+                ]
+                df.index = df.index + 1
+
 
 def _page_1_form_fields(
-    pdf_form_fields: Dict[str, Any], match_result: PDFLTMatchResult
+    line: List[PDFLTRect] | None,
+    lines_iter: Iterator[List[PDFLTRect]],
+    pdf_form_fields: PDFFormFields,
+    match_result: PDFLTMatchResult,
 ) -> PDFLTMatchResult:
-    match_result["WTG"] = str(pdf_form_fields["Dropdun"])
-    match_result["BeginningDate"] = str(pdf_form_fields["BEGINNING Date"])
-    match_result["OperationalHours"] = str(pdf_form_fields["OPERATIONNAL HOURS"])
-    match_result["FinishDate"] = str(pdf_form_fields["FINISH Date"])
-    match_result["ShutdownHours"] = str(pdf_form_fields["SHUTDOWN HOURS"])
-    match_result["SignatureSGRE"] = pdf_form_fields["Signature1"] is not None
-    match_result["Signature"] = pdf_form_fields["Signature5"] is not None
-    return match_result
+    # Initialize required match result fields
+    match_result["YearAnnualService"] = ""
+    match_result["Code"] = ""
+    match_result["Date"] = ""
+    match_result["Rev.:"] = ""
+    match_result["WTG"] = pdf_form_fields["Dropdun"].get("V", "")
+    match_result["BeginningDate"] = pdf_form_fields["BEGINNING Date"].get("V", "")
+    match_result["OperationalHours"] = pdf_form_fields["OPERATIONNAL HOURS"].get(
+        "V", ""
+    )
+    match_result["FinishDate"] = pdf_form_fields["FINISH Date"].get("V", "")
+    match_result["ShutdownHours"] = pdf_form_fields["SHUTDOWN HOURS"].get("V", "")
+    match_result["SignatureSGRE"] = (
+        pdf_form_fields["Signature1"].get("V", None) is not None
+    )
+    match_result["Signature"] = pdf_form_fields["Signature5"].get("V", None) is not None
+
+    # Matches the first page of the preventive PDF when  form fields are present
+    try:
+        # Fetch next line
+        line = next(lines_iter, None)
+
+        # Line should contain 'Year Annual Service' which corresponds to the page title
+        if len(line) < 1:
+            raise PDFLTMatchException("PDF is not in the expected format")
+
+        # Fetch 'Year Annual Service' value
+        rect: PDFLTRect = line[0]
+        match_result["YearAnnualService"] = rect.text.strip()
+
+        # Fetch next line
+        line = next(lines_iter, None)
+
+        # Line should contain 'Code' header and its value
+        if len(line) < 2:
+            raise PDFLTMatchException("PDF is not in the expected format")
+
+        # Find 'Code' header and get its value
+        rect: PDFLTRect = line[1]
+        match_result["Code"] = rect.text.strip()
+
+        # Fetch next line
+        line = next(lines_iter, None)
+
+        # Line should contain 'Date' header and its value
+        if len(line) < 2:
+            raise PDFLTMatchException("PDF is not in the expected format")
+
+        # Find 'Date' header and get its value
+        rect: PDFLTRect = line[1]
+        match_result["Date"] = rect.text.strip()
+
+        # Fetch next line
+        line = next(lines_iter, None)
+
+        # Line should contain 'Rev.:' header and its value
+        if len(line) < 2:
+            raise PDFLTMatchException("PDF is not in the expected format")
+
+        # Find 'Rev.:' header and get its value
+        rect: PDFLTRect = line[1]
+        match_result["Rev.:"] = rect.text.strip()
+
+        return match_result
+    except StopIteration:
+        raise PDFLTMatchException("PDF is not in the expected format")
 
 
 def _page_1_text(
@@ -310,12 +423,13 @@ def _page_1(
     line: List[PDFLTRect],
     lines_iter: Iterator[List[PDFLTRect]],
     match_result: PDFLTMatchResult,
-    pdf_form_fields: Dict[str, Any] | None,
+    pdf_form_fields: PDFFormFields | None,
 ) -> PDFLTMatchResult:
+    # Matches the first page of the preventive PDF with or without form fields
     if not pdf_form_fields:
         return _page_1_text(line, lines_iter, match_result)
     else:
-        return _page_1_form_fields(pdf_form_fields, match_result)
+        return _page_1_form_fields(line, lines_iter, pdf_form_fields, match_result)
 
 
 def _page_n_task(
@@ -329,10 +443,13 @@ def _page_n_task(
 
     text: str = current_rect.text.strip()
 
-    # Sets the 'task' state to the 'WTG Section' text appending if it is not empty
+    # Sets the 'task' state to the 'WTG Section' text appending it to the 'task' state if it exists
     if match_state["task"] and not match_state["subtask"]:
-        text = f"{match_state["task"]} {text}"
+        text = f"{match_state["task"]} {text}".strip()
 
+    # Initializes the 'task' state to the 'WTG Section' text
+    # TODO: Task should only be initialized when 'Task Description Code/Name' is found to prevent creation of tasks when text appending is still expected
+    # (e.g. 'WTG Section' text values followed by each other in task element list pages)
     match_state["task"] = text
     match_state["subtask"] = ""
     match_result["Tasks"][text] = {
@@ -368,11 +485,90 @@ def _page_n_subtask(
 
 
 def _page_n_block_task_element_form_fields(
+    lines_iter: Iterator[List[PDFLTRect]],
     match_state: PDFLTMatchState,
     match_result: PDFLTMatchResult,
     pdf_form_fields: Dict[str, Any],
 ) -> PDFLTMatchResult:
-    pass
+    # Skip line to maintain sync with sequential text reading
+    next(lines_iter, None)
+
+    # Fetch 'Comments' form field values for the current 'block_num'
+    block_comments_key: str = f'Comments-{match_state["block_num"]}'
+    if (
+        block_comments_key not in pdf_form_fields
+        or "Kids" not in pdf_form_fields[block_comments_key]
+    ):
+        # No form field containing the 'Comments' column found for the block task elements in the current block task
+        # TODO: Might need to raise an exception here
+        return match_result
+
+    # Fetch 'MORS' form field values for the current 'block_num'
+    block_mors_key: str = f'MORS-{match_state["block_num"]}'
+    if (
+        block_mors_key not in pdf_form_fields
+        or "Kids" not in pdf_form_fields[block_mors_key]
+    ):
+        # No form field containing the 'MORS' column found for the block task elements in the current block task
+        # TODO: Might need to raise an exception here
+        return match_result
+
+    # Fetch 'Kids' property from 'Comments' and 'MORS' form fields
+    block_mors: Dict[str, PDFFormField] = pdf_form_fields[block_mors_key]["Kids"]
+    block_comments: Dict[str, PDFFormField] = pdf_form_fields[block_comments_key][
+        "Kids"
+    ]
+
+    # The number of 'Kids' in 'Comments' and 'MORS' form fields should match
+    # TODO: They should also contain the same keys
+    if len(block_mors) != len(block_comments):
+        # TODO: Might need to raise an exception here
+        return match_result
+
+    # TODO: Measurement/Unit/Min/Max keys are not present in the form fields in the example pdfs provided.
+    # As such their keys are unknown and will not be matched for now
+
+    # Task and subtask should be set
+    if not match_state["task"] or not match_state["subtask"]:
+        raise PDFLTMatchException("PDF is not in the expected format")
+
+    # Fetches the header values ('Comments', 'MORS Case ID', 'Measurement', 'Unit', 'Min', 'Max')
+    # for the keys present in the 'Comments' form field for the current block task
+    for key, field in block_comments.items():
+        has_any_text: bool = False
+
+        # Initialize 'Elements' dictionary
+        element: Dict[str, Any] = {
+            "TaskCode": "",
+            "Description": "",
+            "Status": "",
+            "Comment": "",
+            "MORS": "",
+            "Measurement": "",
+            "Unit": "",
+            "Min": "",
+            "Max": "",
+        }
+
+        # Skip line to maintain sync with sequential text reading
+        next(lines_iter, None)
+
+        # Fetch 'Comments' value
+        element["Comment"] = field.get("V", "").strip()
+        has_any_text = has_any_text or element["Comment"]
+
+        # Fetch 'MORS' value if key is present in 'MORS' form fields
+        if key in block_mors:
+            element["MORS"] = block_mors[key].get("V", "").strip()
+            has_any_text = has_any_text or element["MORS"]
+
+        # If any of the values are not empty, add the element to the match result
+        if has_any_text:
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["subtask"]
+            ]["Elements"][key] = element
+
+    return match_result
 
 
 def _page_n_block_task_element_text(
@@ -443,6 +639,7 @@ def _page_n_block_task_element_text(
         element["Max"] = rect.text.strip()
         has_any_text = has_any_text or element["Max"]
 
+        # If any of the values are not empty, add the element to the match result
         if (
             has_any_text
             and i
@@ -471,13 +668,86 @@ def _page_n_block_task_element(
         raise PDFLTMatchException("PDF is not in the expected format")
 
     if not pdf_form_fields:
+        # Matches a block task elements when no form fields are present
         return _page_n_block_task_element_text(
             line, lines_iter, match_state, match_result
         )
     else:
+        # Matches a block task elements when form fields are present
         return _page_n_block_task_element_form_fields(
-            match_state, match_result, pdf_form_fields
+            lines_iter, match_state, match_result, pdf_form_fields
         )
+
+
+def _page_n_list_element_form_fields(
+    task_code: str,
+    match_state: PDFLTMatchState,
+    match_result: PDFLTMatchResult,
+    pdf_form_fields: PDFFormFields,
+) -> PDFLTMatchResult:
+    # Compute the 'Result' form field key for the current line in a list of tasks page
+    result_key: str = f"Drop{match_state['block_num']}-{match_state['line_num']}"
+    if result_key not in pdf_form_fields:
+        # No form field containing the 'Result' for the current line in a list of tasks page was found
+        # TODO: Might need to raise an exception here, skip for now as the empty value is allowed
+        pass
+    else:
+        # Fetch 'Result' form field value for the current line
+        result_field: PDFFormField = pdf_form_fields[result_key]
+        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
+            "Elements"
+        ][task_code]["Status"] = result_field.get("V", "").strip()
+
+    # Compute the 'Comments' form field key for the current line in a list of tasks page
+    # There are two possible keys for the 'Comments' form field for the current line in a list of tasks page
+    comments_key1: str = (
+        f"TextComment-{match_state['block_num']}-{match_state['line_num']}"
+    )
+    comments_key2: str = (
+        f"Text{match_state['block_num']}-Comment-{match_state['line_num']}"
+    )
+    if comments_key1 not in pdf_form_fields and comments_key2 not in pdf_form_fields:
+        # No form field containing the 'Comments' for the current line in a list of tasks page was found
+        # TODO: Might need to raise an exception here, skip for now as the empty value is allowed
+        pass
+    else:
+        # Fetch 'Comments' form field value for the current line
+        comments_field: PDFFormField = pdf_form_fields.get(
+            comments_key1, pdf_form_fields.get(comments_key2)
+        )
+        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
+            "Elements"
+        ][task_code]["Comment"] = comments_field.get("V", "").strip()
+
+    # Compute the 'MORS' form field key for the current line in a list of tasks page
+    mors_key: str = f"Text-MORS-{match_state['block_num']}-{match_state['line_num']}"
+    if mors_key not in pdf_form_fields:
+        # No form field containing the 'MORS' for the current line in a list of tasks page was found
+        # TODO: Might need to raise an exception here, skip for now as the empty value is allowed
+        pass
+    else:
+        # Fetch 'MORS' form field value for the current line
+        mors_field: PDFFormField = pdf_form_fields[mors_key]
+        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
+            "Elements"
+        ][task_code]["MORS"] = mors_field.get("V", "").strip()
+
+    # Compute the 'Measurement' form field key for the current line in a list of tasks page
+    measurement_key: str = (
+        f"Text-Measurement-{match_state['block_num']}-{match_state['line_num']}"
+    )
+    if measurement_key not in pdf_form_fields:
+        # No form field containing the 'Measurement' for the current line in a list of tasks page was found
+        # TODO: Might need to raise an exception here, skip for now as the empty value is allowed
+        pass
+    else:
+        # Fetch 'Measurement' form field value for the current line
+        measurement_field: PDFFormField = pdf_form_fields[measurement_key]
+        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
+            "Elements"
+        ][task_code]["Measurement"] = measurement_field.get("V", "").strip()
+
+    return match_result
 
 
 def _page_n_list_element(
@@ -485,7 +755,7 @@ def _page_n_list_element(
     line: List[PDFLTRect] | None,
     match_state: PDFLTMatchState,
     match_result: PDFLTMatchResult,
-    pdf_form_fields: Dict[str, Any] | None,
+    pdf_form_fields: PDFFormFields | None,
 ) -> PDFLTMatchResult:
     # First element should contain text representing the element's 'Task Code'
     if len(current_rect.children) < 1:
@@ -517,33 +787,39 @@ def _page_n_list_element(
         "Elements"
     ][text]["Description"] = current_rect.text.strip()
 
-    # Reads the status of the task under 'Result' header
-    if len(line) > 2:
-        current_rect = line[2]
-        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
-            "Elements"
-        ][text]["Status"] = current_rect.text.strip()
+    if not pdf_form_fields:
+        # Reads the status of the task under 'Result' header
+        if len(line) > 2:
+            current_rect = line[2]
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["subtask"]
+            ]["Elements"][text]["Status"] = current_rect.text.strip()
 
-    # Reads the comment of the task under 'Comment' header
-    if len(line) > 3:
-        current_rect = line[3]
-        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
-            "Elements"
-        ][text]["Comment"] = current_rect.text.strip()
+        # Reads the comment of the task under 'Comment' header
+        if len(line) > 3:
+            current_rect = line[3]
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["subtask"]
+            ]["Elements"][text]["Comment"] = current_rect.text.strip()
 
-    # Reads the MORS of the task under 'MORS Case ID' header
-    if len(line) > 4:
-        current_rect = line[4]
-        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
-            "Elements"
-        ][text]["MORS"] = current_rect.text.strip()
+        # Reads the MORS of the task under 'MORS Case ID' header
+        if len(line) > 4:
+            current_rect = line[4]
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["subtask"]
+            ]["Elements"][text]["MORS"] = current_rect.text.strip()
 
-    # Reads the measurement of the task under 'Measurement' header
-    if len(line) > 5:
-        current_rect = line[5]
-        match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
-            "Elements"
-        ][text]["Measurement"] = current_rect.text.strip()
+        # Reads the measurement of the task under 'Measurement' header
+        if len(line) > 5:
+            current_rect = line[5]
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["subtask"]
+            ]["Elements"][text]["Measurement"] = current_rect.text.strip()
+    else:
+        # Defaults to using form fields to read the fields above
+        _page_n_list_element_form_fields(
+            text, match_state, match_result, pdf_form_fields
+        )
 
     # Reads the unit of the task under 'Unit' header
     if len(line) > 6:
@@ -561,10 +837,14 @@ def _page_n_list_element(
 
     # Reads the max of the task under 'Max' header if it exists in the line
     if len(line) > 8:
-        current_rect = line[8]
+        # TODO: Bug where an empty rectangle is inserted between 'Min' and 'Max' values
+        current_rect = line[-1]  # Temporary fix
         match_result["Tasks"][match_state["task"]]["Elements"][match_state["subtask"]][
             "Elements"
         ][text]["Max"] = current_rect.text.strip()
+
+    # Increment line_num to keep track of the current element when 'pdf_form_fields' is present
+    match_state["line_num"] += 1
 
     return match_result
 
@@ -587,7 +867,7 @@ def _page_n_task_subtask_or_element(
             tech_rect = rect
             break
 
-    # Fetch 'WTG Section' or 'Task Description Code/Name' or 'Task Code' rectangle
+    # Fetch 'WTG Section', 'Task Description Code/Name' or 'Task Code' rectangle
     task_rect: PDFLTRect = line[0]
 
     # Check if task_rect is closer to green, blue or white
@@ -614,6 +894,7 @@ def _page_n_task_subtask_or_element(
         # line has 8/9 elements(Min/Max may be joined if no value is present and line is omitted),
         # and is a grid line containing the 'Task Code', 'Status' 'Comments', 'MORS Case ID', 'Measurement',
         # 'Unit', 'Min', 'Max' values for an element under a list of tasks page
+        # TODO: Minimum line size is at times 6, at times 8, 9 or 10
         _page_n_list_element(
             task_rect, line, match_state, match_result, pdf_form_fields
         )
@@ -626,7 +907,7 @@ def _page_n(
     lines_iter: Iterator[List[PDFLTRect]],
     match_state: PDFLTMatchState,
     match_result: PDFLTMatchResult,
-    pdf_form_fields: Dict[str, Any] | None,
+    pdf_form_fields: PDFFormFields | None,
 ) -> PDFLTMatchResult:
     # Initialize required match result fields
     match_result["Tasks"] = match_result.get("Tasks", {})
@@ -678,17 +959,30 @@ def _pdf_page(
     pdf_page: LTPage,
     match_state: PDFLTMatchState,
     match_result: PDFLTMatchResult,
-    pdf_form_fields: Dict[str, Any] | None,
+    pdf_form_fields: PDFFormFields | None,
 ) -> PDFLTMatchResult:
+    underflow: bool = False
+    for el in pdf_page:
+        if el.x0 < 0 or el.y0 < 0:
+            underflow = True
+            break
+    if underflow:
+        LOG.warning(
+            f"PDF page {pdf_page.pageid} was parsed with some element's bounding boxes outside the page limits"
+        )
+
     params: PDFLTParams = PDFLTParams(
         position_tol=5.0
         if pdf_page.pageid > 1 and pdf_page.pageid != 11
         else 3.0
         if pdf_page.pageid != 11
-        else 40.0,
+        else 40.0
+        if underflow
+        else 5.0,
         min_rect_height=6.0 if pdf_page.pageid > 1 else 0.0,
         min_rect_width=6.0 if pdf_page.pageid > 1 else 0.0,
         min_line_length=6.0 if pdf_page.pageid > 1 else 0.0,
+        vertical_overlap=0.55,
     )
     decomposer: PDFLTDecomposer = PDFLTDecomposer(params)
     intersects: PDFLTIntersections = PDFLTIntersections(params)
@@ -700,26 +994,60 @@ def _pdf_page(
 
     layout.sort(key=lambda el: (-el.y0, el.x0))
 
-    # Group y0 related rects into the same line
+    # Group y related rects into the same line
     lines: List[List[PDFLTRect]] = []
     for lt in layout:
         if len(lines) == 0:
             lines.append([lt])
             continue
-            
-        pline_y0: float = min([el.y0 for el in lines[-1]])
-        pline_y1: float = max([el.y1 for el in lines[-1]])
-        y0: float = lt.y0
-        y1: float = lt.y1
-        
-        # Calculates the vertical overlap percentage between the current rect and the previous line if they overlap at all, given that y1 is always larger than y0
-        overlap: float = max(0, min(y1, pline_y1) - max(y0, pline_y0)) / (y1 - y0)
-             
-            
-        if (
-            abs(lt.y0 - lines[-1][0].y0) <= params.position_tol
-            or abs(lt.y1 - lines[-1][0].y1) <= params.position_tol
-        ):
+
+        # Computes the coordinates of the previous line and the current rect with a tolerance
+        line_y0: float = min([el.y0 - params.position_tol for el in lines[-1]])
+        line_y1: float = max([el.y1 + params.position_tol for el in lines[-1]])
+        y0: float = lt.y0 - params.position_tol
+        y1: float = lt.y1 + params.position_tol
+
+        # Calculates the vertical overlap percentage between the current rect and the previous line if they overlap at all
+        overlap: float
+        if y1 <= line_y0 or y0 >= line_y1:
+            #               | y1
+            #               |
+            #               | y0
+            # | line_y1
+            # |
+            # | line_y0
+            #
+            # | line_y1
+            # |
+            # | line_y0
+            #               | y1
+            #               |
+            #               | y0
+            #
+            overlap = 0
+        else:
+            #              | y1
+            # | line_y1    |
+            # |            | y0
+            # | line_y0
+            #
+            # | line_y1
+            # |            | y1
+            # | line_y0    |
+            #              | y0
+            #
+            min_y1: float = min(y1, line_y1)
+            max_y0: float = max(y0, line_y0)
+            dy: float = min_y1 - max_y0
+            height: float = line_y1 - line_y0
+            overlap = dy / height
+
+        # if (
+        #     abs(lt.y0 - lines[-1][0].y0) <= params.position_tol
+        #     or abs(lt.y1 - lines[-1][0].y1) <= params.position_tol
+        # ):
+        #     lines[-1].append(lt)
+        if overlap >= params.vertical_overlap:
             lines[-1].append(lt)
         else:
             lines.append([lt])

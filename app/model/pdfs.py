@@ -87,12 +87,14 @@ class PDFLTParams(object):
         min_rect_width: float = 6.0,
         min_rect_height: float = 6.0,
         min_line_length: float = 6.0,
+        vertical_overlap: float = 0.2,
     ) -> None:
         self.position_tol: float = position_tol
         self.direction_tol: float = direction_tol
         self.min_rect_width: float = min_rect_width
         self.min_rect_height: float = min_rect_height
         self.min_line_length: float = min_line_length
+        self.vertical_overlap: float = vertical_overlap
 
     def __repr__(self: Self) -> str:
         """Override the default `__repr__` method to return a custom string representation of the object.

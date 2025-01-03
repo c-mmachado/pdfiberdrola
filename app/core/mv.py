@@ -220,9 +220,9 @@ def match_mv_pdf(
     pdf_pages: Iterator[LTPage],
     match_result: PDFLTMatchResult,
     df: DataFrame,
-) -> Generator[PDFLTMatchResult, None, None]:
+) -> Generator[PDFLTMatchResult | Exception, None, None]:
     LOG.debug(f"Matching {PDFType.MV} PDF...")
-    
+
     try:
         state: PDFLTMatchState = {"task": "", "element": "", "subelement": ""}
         while (pdf_page := next(pdf_pages, None)) is not None:
@@ -230,8 +230,34 @@ def match_mv_pdf(
             _match_mv_pdf_page(pdf_page, state, match_result)
             yield match_result
 
-        for task in match_result["Tasks"]:
-            for e in match_result["Tasks"][task]["Elements"]:
+        _fill_dataframe(match_result, df)
+    except Exception as e:
+        LOG.error(f"Error parsing {PDFType.MV} PDF:\n{e}")
+        yield e
+
+
+def _fill_dataframe(match_result: PDFLTMatchResult, df: DataFrame) -> None:
+    for task in match_result["Tasks"]:
+        for e in match_result["Tasks"][task]["Elements"]:
+            df.loc[-1] = [
+                match_result["WTG"],
+                match_result["ChecklistName"],
+                match_result["RevisionDate"],
+                match_result["OrderNumber"],
+                match_result["ApprovalDate"],
+                match_result["Tasks"][task]["WTGSection"],
+                match_result["Tasks"][task]["Elements"][e]["Description"],
+                match_result["Tasks"][task]["Elements"][e]["Remarks"],
+                "N/A",
+                "N/A",
+                match_result["Tasks"][task]["Elements"][e]["Status"],
+                None,
+                None,
+                None,
+            ]
+            df.index = df.index + 1
+
+            for m in match_result["Tasks"][task]["Elements"][e]["Measures"]:
                 df.loc[-1] = [
                     match_result["WTG"],
                     match_result["ChecklistName"],
@@ -239,42 +265,16 @@ def match_mv_pdf(
                     match_result["OrderNumber"],
                     match_result["ApprovalDate"],
                     match_result["Tasks"][task]["WTGSection"],
-                    match_result["Tasks"][task]["Elements"][e]["Description"],
-                    match_result["Tasks"][task]["Elements"][e]["Remarks"],
+                    m,
                     "N/A",
+                    match_result["Tasks"][task]["Elements"][e]["Measures"][m]["Value"],
+                    match_result["Tasks"][task]["Elements"][e]["Measures"][m]["Unit"],
                     "N/A",
-                    match_result["Tasks"][task]["Elements"][e]["Status"],
                     None,
                     None,
                     None,
                 ]
                 df.index = df.index + 1
-
-                for m in match_result["Tasks"][task]["Elements"][e]["Measures"]:
-                    df.loc[-1] = [
-                        match_result["WTG"],
-                        match_result["ChecklistName"],
-                        match_result["RevisionDate"],
-                        match_result["OrderNumber"],
-                        match_result["ApprovalDate"],
-                        match_result["Tasks"][task]["WTGSection"],
-                        m,
-                        "N/A",
-                        match_result["Tasks"][task]["Elements"][e]["Measures"][m][
-                            "Value"
-                        ],
-                        match_result["Tasks"][task]["Elements"][e]["Measures"][m][
-                            "Unit"
-                        ],
-                        "N/A",
-                        None,
-                        None,
-                        None,
-                    ]
-                    df.index = df.index + 1
-    except Exception as e:
-        LOG.error(f"Error parsing {PDFType.MV} PDF:\n{e}")
-        yield e
 
 
 def _match_mv_pdf_page_1(

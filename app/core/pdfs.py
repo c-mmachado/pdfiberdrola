@@ -5,7 +5,7 @@ from os.path import basename
 from shutil import copyfile
 from logging import getLogger, Logger
 from pathlib import Path
-from typing import Any, AnyStr, Dict, Generator, Iterator, List, Tuple
+from typing import Generator, Iterator, Tuple, AnyStr, Dict, List
 
 # Third-Party Imports
 from pandas import DataFrame, ExcelWriter
@@ -18,11 +18,11 @@ from app.config import settings
 from app.core import preventive
 from app.core import mv
 from app.core.mv import match_mv_pdf
-from app.core.preventive import match_prev_pdf, parse_preventive_pdf
+from app.core.preventive import match_prev_pdf
 from app.model.pdfs import PDFType, PDFLTMatchException, PDFLTMatchResult
 from app.utils.paths import is_valid_dir, is_valid_file, make_path, remove_extension
 from app.utils.files import create_dir, is_pdf_file
-from app.utils.pdfs import PDFUtils
+from app.utils.pdfs import PDFUtils, PDFFormFields
 from app.utils.excel import ExcelUtils, ExcelCell
 
 # Constants
@@ -87,29 +87,40 @@ def parse_pdf(
 
     match match_result["Type"]:
         case PDFType.PREVENTIVE:
-            pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(pdf_path)
-            pdf_form_field_raw: List[Any] = PDFUtils.load_form_fields_raw(pdf_path)
+            # pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(pdf_path)
+            # pdf_form_field_raw: List[Any] = PDFUtils.load_form_fields_raw(pdf_path)
+            pdf_form_fields: PDFFormFields | None = PDFUtils.load_form_fields_v2(
+                pdf_path
+            )
 
-            if pdf_form_fields and pdf_form_field_raw:
-                pdf_pages_iter: Iterator[LTPage] = extract_pages(
-                    pdf_path, laparams=LAParams(char_margin=0.8, line_margin=0.4)
-                )
+            # fields_with_t: PDFFormFields = sorted([field for field in pdf_form_fields_v2 if 'T' in field and str(field['T']).strip()], key=lambda x: x['T'])
+            # fields_without_t: PDFFormFields = [field for field in pdf_form_fields_v2 if 'T' not in field or not str(field['T']).strip()]
+            # fields_mapped_by_t_slice: PDFFormFields = fields_with_t[0:500]
+            # fields_mapped_by_t: Dict[str, PDFFormField] = {str(field['T']).strip(): field for field in fields_mapped_by_t_slice}
+            # fields_mapped_by_t_slice = fields_with_t[500:1000]
+            # fields_mapped_by_t = {str(field['T']).strip(): field for field in fields_mapped_by_t_slice}
+            # fields_mapped_by_t_slice = fields_with_t[1000:]
+            # fields_mapped_by_t = {str(field['T']).strip(): field for field in fields_mapped_by_t_slice}
+            # if pdf_form_fields and pdf_form_field_raw:
+            #     pdf_pages_iter: Iterator[LTPage] = extract_pages(
+            #         pdf_path, laparams=LAParams(char_margin=0.8, line_margin=0.4)
+            #     )
 
-                yield from parse_preventive_pdf(
-                    pdf_pages_iter,
-                    match_result,
-                    pdf_path,
-                    dataframe[PDFType.PREVENTIVE],
-                    pdf_form_fields,
-                    pdf_form_field_raw,
-                )
-            else:
-                yield from match_prev_pdf(
-                    pdf_path,
-                    match_result,
-                    dataframe[PDFType.PREVENTIVE],
-                    pdf_form_fields,
-                )
+            #     yield from parse_preventive_pdf(
+            #         pdf_pages_iter,
+            #         match_result,
+            #         pdf_path,
+            #         dataframe[PDFType.PREVENTIVE],
+            #         pdf_form_fields,
+            #         pdf_form_field_raw,
+            #     )
+            # else:
+            yield from match_prev_pdf(
+                pdf_path,
+                match_result,
+                dataframe[PDFType.PREVENTIVE],
+                pdf_form_fields,
+            )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case PDFType.MV:
             pdf_pages_iter: Iterator[LTPage] = extract_pages(
