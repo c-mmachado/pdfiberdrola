@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [tool.poetry]
 name = "inspetrio"
-version = "0.4.3"
+version = "0.4.9"
 description = "Inspetrio is a desktop app that parses PDF files and converts the data into Excel documents, following a predefined template for streamlined reporting."
 license = "MIT"
 readme = "README.md"
