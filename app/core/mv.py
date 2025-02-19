@@ -39,8 +39,9 @@ from app.model.pdfs import (
     PDFLTDecomposer,
     PDFLTRect,
     PDFLTTextBox,
-    PDFType,
+    PDFLTFormat,
     PDFLTMatchResult,
+    PDFLTTextLine,
 )
 
 # Constants
@@ -221,7 +222,7 @@ def match_mv_pdf(
     match_result: PDFLTMatchResult,
     df: DataFrame,
 ) -> Generator[PDFLTMatchResult | Exception, None, None]:
-    LOG.debug(f"Matching {PDFType.MV} PDF...")
+    LOG.debug(f"Matching {PDFLTFormat.MV} PDF...")
 
     try:
         state: PDFLTMatchState = {"task": "", "element": "", "subelement": ""}
@@ -232,7 +233,7 @@ def match_mv_pdf(
 
         _fill_dataframe(match_result, df)
     except Exception as e:
-        LOG.error(f"Error parsing {PDFType.MV} PDF:\n{e}")
+        LOG.error(f"Error parsing {PDFLTFormat.MV} PDF:\n{e}")
         yield e
 
 
@@ -462,10 +463,12 @@ def _match_mv_pdf_page_n_task_or_element(
         if len(remarks_rect.children) > 0 and isinstance(
             remarks_rect.children[0], PDFLTTextBox
         ):
-            remarks: PDFLTTextBox = remarks_rect.children[0]
-            match_result["Tasks"][match_state["task"]]["Elements"][
-                match_state["element"]
-            ]["Remarks"] = remarks.text.strip()
+            for i in range(len(remarks_rect.children)):
+                # Each rect contains a remark
+                remarks: PDFLTTextBox = remarks_rect.children[i]
+                match_result["Tasks"][match_state["task"]]["Elements"][
+                    match_state["element"]
+                ]["Remarks"] += remarks.text.strip() + "\n"
 
         # Match element tools
         tools_rect: PDFLTRect = line[3]
@@ -540,9 +543,36 @@ def _match_mv_pdf_page_n_measure(
                 "Unit": "",
             }
 
-    # Checks if the measure has a value and unit otherwise skips
+    if len(measure_rect.children) > 0 and isinstance(
+        measure_rect.children[0], PDFLTTextLine
+    ):
+        # Measure is a line of text instead of a pair of text and yellow rect
+        measure_name_line: PDFLTTextLine = measure_rect.children[0]
+        measure_name = measure_name_line.text.strip()
+        
+        if match_state["measure"]:
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["element"]
+            ]["Measures"][match_state["measure"]]["Value"] =  measure_name
+        elif (
+            measure_name
+            not in match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["element"]
+            ]["Measures"]
+        ):
+            match_state["measure"] = measure_name
+            match_result["Tasks"][match_state["task"]]["Elements"][
+                match_state["element"]
+            ]["Measures"][measure_name] = {
+                "Value": "",
+                "Unit": "",
+            }
+
+    # Checks if the measure has a value and unit
     if len(measure_rect.children) <= 1:
         return match_result
+
+    match_state["measure"] = ""
 
     # Measure has a value and unit checks format of the measure
     if len(measure_rect.children) > 1 and isinstance(
@@ -722,6 +752,9 @@ def _match_mv_pdf_page(
             # Match the first page
             _match_mv_pdf_page_1(line, lines_iter, match_result)
         else:
+            if pdf_page.pageid == 28:
+                pass
+
             # Skips the grayed-out page number, eg.'[2/8]'
             line = next(lines_iter, None)
 

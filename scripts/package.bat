@@ -6,7 +6,7 @@ set root=%~dp0
 set root=!root:~0,-1!
 
 :: Required 3rd party tools
-set VARSALL_BAT="C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
+set VARSALL_BAT="C:\Programs\VisualStudio\VC\Auxiliary\Build\vcvarsall.bat"
 set 7Z_EXE="C:\Programs\7-Zip\7z.exe"
 set NSIS_EXE="C:\Programs\NSIS\x64\3.10\makensis.exe"
 
@@ -51,7 +51,7 @@ echo Environment variables set successfully
 
 :: Compiles the application using Nuitka and generate the application executable
 if not exist !NUITKA_DIST_DIR!\!NUITKA_EXE_NAME! (
-    !VENV_DIR!/Scripts/python -m nuitka --standalone --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyside6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
+    !VENV_DIR!/Scripts/python -m nuitka --standalone --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyqt6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
         echo Nuitka compilation successful
     ) || (
         echo Error: Nuitka compilation failed && goto eof

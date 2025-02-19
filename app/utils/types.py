@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 # Python Imports
-from collections.abc import Sequence
 from typing import Any, NoReturn, Self, final
 
 # Third-Party Imports

@@ -5,7 +5,7 @@ from os.path import basename
 from shutil import copyfile
 from logging import getLogger, Logger
 from pathlib import Path
-from typing import Generator, Iterator, Tuple, AnyStr, Dict, List
+from typing import Generator, Iterator, Self, Tuple, AnyStr, Dict, List
 
 # Third-Party Imports
 from pandas import DataFrame, ExcelWriter
@@ -19,7 +19,12 @@ from app.core import preventive
 from app.core import mv
 from app.core.mv import match_mv_pdf
 from app.core.preventive import match_prev_pdf
-from app.model.pdfs import PDFType, PDFLTMatchException, PDFLTMatchResult
+from app.model.pdfs import (
+    PDFLTFormat,
+    PDFLTMatchException,
+    PDFLTMatchResult,
+    PDFLTMatcher,
+)
 from app.utils.paths import is_valid_dir, is_valid_file, make_path, remove_extension
 from app.utils.files import create_dir, is_pdf_file
 from app.utils.pdfs import PDFUtils, PDFFormFields
@@ -29,19 +34,37 @@ from app.utils.excel import ExcelUtils, ExcelCell
 LOG: Logger = getLogger(__name__)
 
 
-def _resolve_pdf_type(first_page: PageObject) -> PDFType:
+class PDFLTMatchEngine(object):
+    def __init__(self: Self) -> None:
+        self._matchers: List[PDFLTMatcher] = []
+
+    def run(
+        self: Self, pdf_path: str
+    ) -> Generator[PDFLTMatchResult | Exception, None, None]:
+        try:
+            context: PDFLTMatchResult = {}
+
+            for matcher in self._matchers:
+                if matcher.can_match(pdf_path):
+                    yield from matcher.match(pdf_path, context)
+                    break
+        except Exception as e:
+            yield e
+
+
+def _resolve_pdf_type(first_page: PageObject) -> PDFLTFormat:
     page_lines: str = first_page.extract_text(extraction_mode="layout").split("\n")
     first_line: str = page_lines[0].strip().lower()
 
-    if first_line.startswith(PDFType.PREVENTIVE.lower()):
-        return PDFType.MV
-    elif first_line.find(PDFType.PREVENTIVE.lower()) >= 0:
-        return PDFType.PREVENTIVE
-    return PDFType.UNKNOWN
+    if first_line.startswith(PDFLTFormat.PREVENTIVE.lower()):
+        return PDFLTFormat.MV
+    elif first_line.find(PDFLTFormat.PREVENTIVE.lower()) >= 0:
+        return PDFLTFormat.PREVENTIVE
+    return PDFLTFormat.UNKNOWN
 
 
 def parse_pdf(
-    pdf_path: str, dataframe: Dict[PDFType, DataFrame]
+    pdf_path: str, dataframe: Dict[PDFLTFormat, DataFrame]
 ) -> Generator[PDFLTMatchResult | Exception, None, None]:
     LOG.debug(f"Starting parsing of '{pdf_path}'...")
 
@@ -57,7 +80,7 @@ def parse_pdf(
     pdf_pages: List[PageObject] = pdf_reader.pages
     match_result: PDFLTMatchResult = {"Tasks": {}}
     match_result["Type"] = _resolve_pdf_type(pdf_pages[0])
-    LOG.debug(f'Resolved PDF type: {match_result["Type"]}')
+    LOG.debug(f"Resolved PDF type: {match_result['Type']}")
 
     # pdf_pages_iter: Iterator[LTPage] = extract_pages(
     #     pdf_path, laparams=LAParams(char_margin=1.0)
@@ -86,7 +109,7 @@ def parse_pdf(
     #     root: PDFLayoutPage = _sort_pdf_page_elements(page)
 
     match match_result["Type"]:
-        case PDFType.PREVENTIVE:
+        case PDFLTFormat.PREVENTIVE:
             # pdf_form_fields: Dict[str, Any] = PDFUtils.load_form_fields(pdf_path)
             # pdf_form_field_raw: List[Any] = PDFUtils.load_form_fields_raw(pdf_path)
             pdf_form_fields: PDFFormFields | None = PDFUtils.load_form_fields_v2(
@@ -118,15 +141,17 @@ def parse_pdf(
             yield from match_prev_pdf(
                 pdf_path,
                 match_result,
-                dataframe[PDFType.PREVENTIVE],
+                dataframe[PDFLTFormat.PREVENTIVE],
                 pdf_form_fields,
             )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
-        case PDFType.MV:
+        case PDFLTFormat.MV:
             pdf_pages_iter: Iterator[LTPage] = extract_pages(
                 pdf_path, laparams=LAParams(char_margin=1.0)
             )
-            yield from match_mv_pdf(pdf_pages_iter, match_result, dataframe[PDFType.MV])
+            yield from match_mv_pdf(
+                pdf_pages_iter, match_result, dataframe[PDFLTFormat.MV]
+            )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case _:
             LOG.debug("Unknown PDF type")
@@ -139,7 +164,7 @@ def parse_pdf_gen(
     out_dir: AnyStr,
     out_path: AnyStr,
     excel_cell: ExcelCell,
-    df: Dict[PDFType, DataFrame],
+    df: Dict[PDFLTFormat, DataFrame],
 ) -> Generator[Tuple[int, int, PDFLTMatchResult | Exception], None, None]:
     page_count: int = PDFUtils.page_count(pdf_path)
     page_num = 0
@@ -280,8 +305,11 @@ def parse_pdfs(
         LOG.debug(f"Reading Excel template from '{excel_template}'...")
         df: Dict[str, DataFrame] = ExcelUtils.read_excel(
             file_path=excel_template,
-            columns={PDFType.PREVENTIVE: preventive.COLUMNS, PDFType.MV: mv.COLUMNS},
-            sheet_names=[PDFType.PREVENTIVE, PDFType.MV],
+            columns={
+                PDFLTFormat.PREVENTIVE: preventive.COLUMNS,
+                PDFLTFormat.MV: mv.COLUMNS,
+            },
+            sheet_names=[PDFLTFormat.PREVENTIVE, PDFLTFormat.MV],
             start_cell=ExcelUtils.resolve_excel_cell(excel_template_cell),
         )
         LOG.debug(f"Excel template read from '{excel_template}'")
