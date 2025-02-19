@@ -8,16 +8,15 @@ from pathlib import Path
 from typing import Generator, List, Self, Tuple, TypedDict
 
 # Third-Party Imports
-from PySide6 import QtWidgets, QtCore
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (
     QMainWindow,
     QApplication,
     QFileDialog,
     QDialog,
     QListWidgetItem,
 )
-from PySide6.QtCore import QDir
+from PyQt6.QtCore import QDir, pyqtSlot
 
 # Local Imports
 from app.config import settings
@@ -32,9 +31,9 @@ from app.utils.types import TypeUtils
 
 
 class Window(QMainWindow, Ui_MainWindow):
-    _MEMENTO_FILE = "resources/ui/memento.json"
-    _MAIN_WINDOW_ICON = "resources/ui/iberdrola.png"
-    _MAIN_WINDOW_LIST_PDF = "resources/ui/pdf.png"
+    _MEMENTO_FILE = "resources/gui/memento.json"
+    _MAIN_WINDOW_ICON = "resources/gui/iberdrola.png"
+    _MAIN_WINDOW_LIST_PDF = "resources/gui/pdf.png"
 
     class Memento(TypedDict):
         input_files: List[str]
@@ -99,7 +98,8 @@ class Window(QMainWindow, Ui_MainWindow):
                 f,
             )
 
-    @QtCore.Slot()
+    # @QtCore.Slot()
+    @pyqtSlot()
     def browse_input_files(self) -> None:
         directory: str = self.input_files[-1] if len(self.input_files) > 0 else ""
         if not is_valid_dir(directory):
@@ -113,7 +113,8 @@ class Window(QMainWindow, Ui_MainWindow):
         self._resolve_input_files(fnames)
         self._save_memento()
 
-    @QtCore.Slot()
+    # @QtCore.Slot()
+    @pyqtSlot()
     def browse_input_dir(self) -> None:
         directory: str = self.input_files[-1] if len(self.input_files) > 0 else ""
         if not is_valid_dir(directory):
@@ -178,7 +179,8 @@ class Window(QMainWindow, Ui_MainWindow):
         else:
             self.pushButton_3.setEnabled(False)
 
-    @QtCore.Slot()
+    # @QtCore.Slot()
+    @pyqtSlot()
     def browse_out_dir(self) -> None:
         directory: str = self.output_dir if self.output_dir else ""
         fnames: List[str] = self._open_file_dialog(
@@ -197,7 +199,8 @@ class Window(QMainWindow, Ui_MainWindow):
         else:
             self.pushButton_3.setEnabled(False)
 
-    @QtCore.Slot()
+    # @QtCore.Slot()
+    @pyqtSlot()
     def browse_template(self) -> None:
         directory: str = (
             os.path.dirname(self.template_file) if self.template_file else ""
@@ -212,12 +215,14 @@ class Window(QMainWindow, Ui_MainWindow):
             self.lineEdit_3.setText(self.template_file)
             self._save_memento()
 
-    @QtCore.Slot(bool)
+    # @QtCore.Slot(bool)
+    @pyqtSlot(result=bool)
     def toggled_split(self, state: bool) -> None:
         self.split = state
         self._save_memento()
 
-    @QtCore.Slot()
+    # @QtCore.Slot()
+    @pyqtSlot()
     def process(self) -> None:
         self.label_4.setVisible(False)
         self.pushButton_3.setEnabled(False)
@@ -301,7 +306,7 @@ class Window(QMainWindow, Ui_MainWindow):
         #         selected.append('"{}"'.format(index.data()))
         #     lineEdit.setText(' '.join(selected))
 
-        dialog = QtWidgets.QFileDialog(parent, windowTitle=caption)
+        dialog = QFileDialog(parent, windowTitle=caption)
         dialog.setFilter(dialog.filter() | QDir.Filter.Hidden)
         dialog.setFileMode(file_mode)
         dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
@@ -320,7 +325,7 @@ class Window(QMainWindow, Ui_MainWindow):
         # need to be able to "open" directories as we can do with files, so we
         # just override accept() with the default QDialog implementation which
         # will just return exec_()
-        dialog.accept = lambda: QtWidgets.QDialog.accept(dialog)
+        dialog.accept = lambda: QDialog.accept(dialog)
 
         # there are many item views in a non-native dialog, but the ones displaying
         # the actual contents are created inside a QStackedWidget; they are a

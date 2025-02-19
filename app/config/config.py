@@ -2,14 +2,12 @@
 
 # Python Imports
 from logging import Logger, getLogger
-from typing import Annotated, Optional, Tuple, Type
+from typing import Annotated, Optional
 
 # Third-Party Imports
 from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
-    PydanticBaseSettingsSource,
-    PyprojectTomlConfigSettingsSource,
     SettingsConfigDict,
 )
 
@@ -36,26 +34,24 @@ class AppSettings(BaseSettings, MetaProperties):
     excel_template_start_cell: Annotated[Optional[str], Field(None)]
 
 
-class TomlSettings(BaseSettings, MetaProperties):
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: Type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> Tuple[PydanticBaseSettingsSource, ...]:
-        return (PyprojectTomlConfigSettingsSource(settings_cls),)
+# class TomlSettings(BaseSettings, MetaProperties):
+#     @classmethod
+#     def settings_customise_sources(
+#         cls,
+#         settings_cls: Type[BaseSettings],
+#         init_settings: PydanticBaseSettingsSource,
+#         env_settings: PydanticBaseSettingsSource,
+#         dotenv_settings: PydanticBaseSettingsSource,
+#         file_secret_settings: PydanticBaseSettingsSource,
+#     ) -> Tuple[PydanticBaseSettingsSource, ...]:
+#         return (PyprojectTomlConfigSettingsSource(settings_cls),)
 
-    model_config = SettingsConfigDict(
+#     model_config = SettingsConfigDict(
         
-        pyproject_toml_table_header=("tool", "poetry"),
-        case_sensitive=False,
-        extra="ignore",
-    )
-
-
-toml = TomlSettings()
-print(f"toml:\n{toml.model_dump_json(indent = 2)}")
-t = 1
+#         pyproject_toml_table_header=("tool", "poetry"),
+#         case_sensitive=False,
+#         extra="ignore",
+#     )
+# toml = TomlSettings()
+# print(f"toml:\n{toml.model_dump_json(indent = 2)}")
+# t = 1

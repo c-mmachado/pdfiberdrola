@@ -27,14 +27,16 @@ from app.utils.types import Final, TypeUtils
 
 # Constants
 LOG: Logger = getLogger(__name__)
-PDFField = tuple[str, str]
+
 Point = Tuple[float, float]
 LineSegment = Tuple[Point, Point]
 LineIntersect = Tuple[Point, float, float, float]
 
 
 class PDFLTException(Exception):
-    def __init__(self: Self, status: int = 1, reason: str = '', exception: Exception = None) -> None:
+    def __init__(
+        self: Self, status: int = 1, reason: str = "", exception: Exception = None
+    ) -> None:
         super().__init__(reason)
 
 
@@ -88,6 +90,7 @@ class BBox(object):
 
 PDFFormField = Dict[str, Any]
 PDFFormFields = Dict[str, PDFFormField]
+
 
 @final
 class PDFUtils(Final):
@@ -145,7 +148,7 @@ class PDFUtils(Final):
             }
             LOG.debug(f"Loaded PDF form fields: {len(fields)}")
             return fields
-        
+
     @staticmethod
     def load_form_fields_v2(pdf_path: str) -> PDFFormFields | None:
         LOG.debug("Loading PDF form fields...")
@@ -167,10 +170,13 @@ class PDFUtils(Final):
             ]
             fields: List[PDFFormField] = [f.resolve() for f in acro_form]
             LOG.debug(f"Loaded PDF form fields: {len(fields)}")
-            
+
             return {
                 f.get("T"): f
-                for f in sorted([PDFUtils._decode_form_field(f) for f in acro_form], key=lambda x: x.get("T"))
+                for f in sorted(
+                    [PDFUtils._decode_form_field(f) for f in acro_form],
+                    key=lambda x: x.get("T"),
+                )
             }
 
     @staticmethod
@@ -203,12 +209,9 @@ class PDFUtils(Final):
         if TypeUtils.is_iterable(field) and not isinstance(field, list):
             for attr in [a for a in field if a in ["T", "V", "Kids", "P"]]:
                 field[attr] = PDFUtils._decode_form_field(field.get(attr))
-                
+
                 if attr == "Kids":
-                    field['Kids'] = {
-                        f.get("T"): f
-                        for f in field['Kids']
-                    }
+                    field["Kids"] = {f.get("T"): f for f in field["Kids"]}
         elif isinstance(field, list):
             field = [PDFUtils._decode_form_field(v) for v in field]
         else:
@@ -238,8 +241,6 @@ class PDFUtils(Final):
 
 @final
 class PDFLayoutUtils(Final):
-    INTERCEPT_THRESHOLD: float = 1.0
-
     @staticmethod
     def bbox_overlaps(bbox1: BBox, bbox2: BBox) -> bool:
         if (

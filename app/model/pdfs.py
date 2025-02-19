@@ -11,6 +11,7 @@ from typing import (
     Any,
     Deque,
     Dict,
+    Generator,
     Generic,
     Iterable,
     Iterator,
@@ -68,7 +69,7 @@ class PDFLTMatchException(PDFLTException):
     pass
 
 
-class PDFType(StrEnum):
+class PDFLTFormat(StrEnum):
     PREVENTIVE = "Preventive"
     MV = "MV"
     UNKNOWN = "Unknown"
@@ -77,6 +78,20 @@ class PDFType(StrEnum):
 class PDFLTLineType(Enum):
     HORIZONTAL = auto()
     VERTICAL = auto()
+
+
+class PDFLTMatcher(ABC):
+    def match(
+        self: Self, pdf_path: str, context: PDFLTMatchResult
+    ) -> Generator[PDFLTMatchResult | Exception, None, None]:
+        raise NotImplementedError(
+            f"Method '{self.match.__name__}' must be implemented in subclass."
+        )
+
+    def can_match(self: Self, pdf_path: str) -> bool:
+        raise NotImplementedError(
+            f"Method '{self.can_match.__name__}' must be implemented in subclass."
+        )
 
 
 class PDFLTParams(object):
@@ -120,7 +135,7 @@ class PDFLTComponentStyle(object):
 
 
 class PDFLTComponent(Generic[LTType]):
-    def __init__(self: Self, element: LTType) -> Self:
+    def __init__(self: Self, element: LTType) -> None:
         self.element: LTType = element
         self.bbox: BBox = PDFLayoutUtils.bbox(element)
         self.x0: float = self.bbox.x0
@@ -159,7 +174,7 @@ class PDFLTContainer(
     Generic[LTType, PDFLTType],
     PDFLTComponent[LTType],
 ):
-    def __init__(self: Self, element: LTType) -> Self:
+    def __init__(self: Self, element: LTType) -> None:
         super().__init__(element)
         self._children: List[PDFLTType] = []
 
