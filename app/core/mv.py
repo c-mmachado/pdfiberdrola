@@ -22,8 +22,10 @@ from pdfminer.layout import (
     LTCurve,
     LTLine,
     LTComponent,
+    LAParams,
     Color,
 )
+from pdfminer.high_level import extract_pages
 
 # Local Imports
 from app.model.pdfs import (
@@ -217,6 +219,44 @@ class MVLTComposer(PDFLTComposer):
         self._assign_components_to_rects(crosses, rects)
 
 
+def can_match_mv_pdf(
+    pdf_path: str,
+    match_result: PDFLTMatchResult,
+) -> PDFLTFormat.MV:
+    pdf_pages_iter: Iterator[LTPage] = extract_pages(
+        pdf_path, laparams=LAParams(char_margin=1.0)
+    )
+    pdf_page: LTPage | None = next(pdf_pages_iter, None)
+
+    try:
+        _match_mv_pdf_page(pdf_page, {}, match_result)
+    except Exception as e:
+        LOG.debug(f"PDF {pdf_path} does not match the expected format: {e}")
+        return None
+
+    if "ChecklistName" not in match_result or not match_result["ChecklistName"]:
+        LOG.debug(f"PDF {pdf_path} does not have 'ChecklistName' field or it is empty")
+        return None
+
+    checklist_name: str = match_result.get("ChecklistName", "")
+    if (
+        checklist_name.lower().startswith("mv")
+        or checklist_name.lower().find("_mv") > -1
+    ):
+        LOG.debug(f"PDF {pdf_path} starts with 'MV' in 'ChecklistName' field")
+        return PDFLTFormat.MV
+    elif checklist_name.lower().startswith("preventive maintenance"):
+        LOG.debug(
+            f"PDF {pdf_path} starts with 'Preventive Maintenance' in 'ChecklistName' field"
+        )
+        return PDFLTFormat.PREVENTIVE_Y7
+
+    LOG.debug(
+        f"PDF {pdf_path} does not start with any known format in 'ChecklistName' field"
+    )
+    return None
+
+
 def match_mv_pdf(
     pdf_pages: Iterator[LTPage],
     match_result: PDFLTMatchResult,
@@ -237,7 +277,94 @@ def match_mv_pdf(
         yield e
 
 
+def _fill_dataframe_preventive_y7(
+    match_result: PDFLTMatchResult,
+    df: DataFrame,
+) -> None:
+    # Matches the headers from the MV format in toe Preventive dataframe
+    for task in match_result["Tasks"]:
+        for e in match_result["Tasks"][task]["Elements"]:
+            df.loc[-1] = [
+                match_result["WTG"],  # WTG
+                match_result["ChecklistName"],  # Year Annual Service
+                None,  # Beginning Date
+                None,  # Finish Date
+                None,  # Checklist Code
+                None,  # Revision
+                match_result["RevisionDate"],  # Checklist Rev Date
+                None,  # Signature SGRE site manager
+                None,  # Signature 3rd Party site manager
+                match_result["Tasks"][task]["WTGSection"],  # WTG Section
+                match_result["Tasks"][task]["Elements"][e][
+                    "Description"
+                ],  # Task Description Code/Name
+                match_result["Tasks"][task]["Elements"][e]["Description"].split(":")[
+                    0
+                ],  # Task Code
+                match_result["Tasks"][task]["Elements"][e]["Description"].split(":")[
+                    1
+                ],  # Task Description
+                match_result["Tasks"][task]["Elements"][e][
+                    "Status"
+                ],  # Status acc. Doc. / Result
+                match_result["Tasks"][task]["Elements"][e][
+                    "Remarks"
+                ],  # Fault/Observation Description
+                "N/A",  # MORS Case ID
+                "N/A",  # Measurement
+                "N/A",  # Unit
+                "N/A",  # Min
+                "N/A",  # Max
+                None,
+                None,
+                None,
+            ]
+            df.index = df.index + 1
+
+            for m in match_result["Tasks"][task]["Elements"][e]["Measures"]:
+                df.loc[-1] = [
+                    match_result["WTG"],  # WTG
+                    match_result["ChecklistName"],  # Year Annual Service
+                    None,  # Beginning Date
+                    None,  # Finish Date
+                    None,  # Checklist Code
+                    None,  # Revision
+                    match_result["RevisionDate"],  # Checklist Rev Date
+                    None,  # Signature SGRE site manager
+                    None,  # Signature 3rd Party site manager
+                    match_result["Tasks"][task]["WTGSection"],  # WTG Section
+                    match_result["Tasks"][task]["Elements"][e][
+                        "Description"
+                    ],  # Task Description Code/Name
+                    match_result["Tasks"][task]["Elements"][e]["Description"].split(
+                        ":"
+                    )[0],  # Task Code
+                    match_result["Tasks"][task]["Elements"][e]["Description"].split(
+                        ":"
+                    )[1],  # Task Description
+                    "N/A",  # Status acc. Doc. / Result
+                    "N/A",  # Fault/Observation Description
+                    "N/A",  # MORS Case ID
+                    match_result["Tasks"][task]["Elements"][e]["Measures"][m][
+                        "Value"
+                    ],  # Measurement
+                    match_result["Tasks"][task]["Elements"][e]["Measures"][m][
+                        "Unit"
+                    ],  # Unit
+                    "N/A",  # Min
+                    "N/A",  # Max
+                    None,
+                    None,
+                    None,
+                ]
+                df.index = df.index + 1
+
+
 def _fill_dataframe(match_result: PDFLTMatchResult, df: DataFrame) -> None:
+    if match_result["Type"] == PDFLTFormat.PREVENTIVE_Y7:
+        _fill_dataframe_preventive_y7(match_result, df)
+        return
+
     for task in match_result["Tasks"]:
         for e in match_result["Tasks"][task]["Elements"]:
             df.loc[-1] = [
@@ -549,11 +676,11 @@ def _match_mv_pdf_page_n_measure(
         # Measure is a line of text instead of a pair of text and yellow rect
         measure_name_line: PDFLTTextLine = measure_rect.children[0]
         measure_name = measure_name_line.text.strip()
-        
+
         if match_state["measure"]:
             match_result["Tasks"][match_state["task"]]["Elements"][
                 match_state["element"]
-            ]["Measures"][match_state["measure"]]["Value"] =  measure_name
+            ]["Measures"][match_state["measure"]]["Value"] = measure_name
         elif (
             measure_name
             not in match_result["Tasks"][match_state["task"]]["Elements"][

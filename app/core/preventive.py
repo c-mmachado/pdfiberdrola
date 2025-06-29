@@ -58,6 +58,54 @@ COLUMNS: List[str] = [
 ]
 
 
+def can_match_preventive_pdf(
+    pdf_path: str,
+    match_result: PDFLTMatchResult,
+) -> PDFLTFormat.PREVENTIVE:
+    pdf_form_fields: PDFFormFields | None = PDFUtils.load_form_fields_v2(pdf_path)
+
+    match_state: PDFLTMatchState = {
+        "task": None,
+        "subtask": None,
+        "block_num": 1,
+        "line_num": 1,
+    }
+
+    page_num: int = 1
+    pdf_page: LTPage = next(
+        extract_pages(
+            pdf_path,
+            page_numbers=[page_num - 1],
+            laparams=LAParams(
+                char_margin=0.8, line_margin=0.4 if page_num > 1 else 0.2
+            ),
+        ),
+        None,
+    )
+    pdf_page.pageid = page_num
+    try:
+        _pdf_page(pdf_page, match_state, match_result, pdf_form_fields)
+    except Exception as e:
+        LOG.debug(f"PDF {pdf_path} does not match the expected format: {e}")
+        return None
+
+    if "YearAnnualService" not in match_result or not match_result["YearAnnualService"]:
+        LOG.debug(
+            f"PDF {pdf_path} does not have 'Year Annual Service' field or it is empty"
+        )
+        return None
+
+    yearAnnualService: str = match_result.get("YearAnnualService", "")
+    if yearAnnualService.lower().index("preventive maintenance") == -1:
+        LOG.debug(
+            "PDF does not contain 'Preventive Maintenance' in 'Year Annual Service' field"
+        )
+        return None
+
+    LOG.debug("PDF contains 'Preventive Maintenance' in 'Year Annual Service' field")
+    return PDFLTFormat.PREVENTIVE
+
+
 def match_prev_pdf(
     pdf_path: str,
     match_result: PDFLTMatchResult,
@@ -438,7 +486,7 @@ def _page_n_task(
 
     # Sets the 'task' state to the 'WTG Section' text appending it to the 'task' state if it exists
     if match_state["task"] and not match_state["subtask"]:
-        text = f"{match_state["task"]} {text}".strip()
+        text = f"{match_state['task']} {text}".strip()
 
     # Initializes the 'task' state to the 'WTG Section' text
     # TODO: Task should only be initialized when 'Task Description Code/Name' is found to prevent creation of tasks when text appending is still expected
@@ -487,7 +535,7 @@ def _page_n_block_task_element_form_fields(
     next(lines_iter, None)
 
     # Fetch 'Comments' form field values for the current 'block_num'
-    block_comments_key: str = f'Comments-{match_state["block_num"]}'
+    block_comments_key: str = f"Comments-{match_state['block_num']}"
     if (
         block_comments_key not in pdf_form_fields
         or "Kids" not in pdf_form_fields[block_comments_key]
@@ -497,7 +545,7 @@ def _page_n_block_task_element_form_fields(
         return match_result
 
     # Fetch 'MORS' form field values for the current 'block_num'
-    block_mors_key: str = f'MORS-{match_state["block_num"]}'
+    block_mors_key: str = f"MORS-{match_state['block_num']}"
     if (
         block_mors_key not in pdf_form_fields
         or "Kids" not in pdf_form_fields[block_mors_key]

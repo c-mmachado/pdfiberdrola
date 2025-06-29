@@ -9,7 +9,6 @@ from typing import Generator, Iterator, Self, Tuple, AnyStr, Dict, List
 
 # Third-Party Imports
 from pandas import DataFrame, ExcelWriter
-from pypdf import PageObject, PdfReader
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTPage, LAParams
 
@@ -17,8 +16,8 @@ from pdfminer.layout import LTPage, LAParams
 from app.config import settings
 from app.core import preventive
 from app.core import mv
-from app.core.mv import match_mv_pdf
-from app.core.preventive import match_prev_pdf
+from app.core.mv import can_match_mv_pdf, match_mv_pdf
+from app.core.preventive import can_match_preventive_pdf, match_prev_pdf
 from app.model.pdfs import (
     PDFLTFormat,
     PDFLTMatchException,
@@ -52,15 +51,15 @@ class PDFLTMatchEngine(object):
             yield e
 
 
-def _resolve_pdf_type(first_page: PageObject) -> PDFLTFormat:
-    page_lines: str = first_page.extract_text(extraction_mode="layout").split("\n")
-    first_line: str = page_lines[0].strip().lower()
+# def _resolve_pdf_type(first_page: PageObject) -> PDFLTFormat:
+#     page_lines: str = first_page.extract_text(extraction_mode="layout").split("\n")
+#     first_line: str = page_lines[0].strip().lower()
 
-    if first_line.startswith(PDFLTFormat.PREVENTIVE.lower()):
-        return PDFLTFormat.MV
-    elif first_line.find(PDFLTFormat.PREVENTIVE.lower()) >= 0:
-        return PDFLTFormat.PREVENTIVE
-    return PDFLTFormat.UNKNOWN
+#     if first_line.startswith(PDFLTFormat.PREVENTIVE.lower()):
+#         return PDFLTFormat.MV
+#     elif first_line.find(PDFLTFormat.PREVENTIVE.lower()) >= 0:
+#         return PDFLTFormat.PREVENTIVE
+#     return PDFLTFormat.UNKNOWN
 
 
 def parse_pdf(
@@ -76,10 +75,20 @@ def parse_pdf(
     LOG.debug(f"File '{pdf_path}' is of PDF type. Proceeding...")
 
     LOG.debug("Resolving PDF type...")
-    pdf_reader = PdfReader(pdf_path)
-    pdf_pages: List[PageObject] = pdf_reader.pages
+    # pdf_reader = PdfReader(pdf_path)
+    # pdf_pages: List[PageObject] = pdf_reader.pages
+
     match_result: PDFLTMatchResult = {"Tasks": {}}
-    match_result["Type"] = _resolve_pdf_type(pdf_pages[0])
+    pdf_type: PDFLTFormat = can_match_mv_pdf(pdf_path, match_result)
+    if pdf_type is None:
+        pdf_type = can_match_preventive_pdf(pdf_path, match_result)
+
+    if not pdf_type:
+        LOG.debug(f"PDF '{pdf_path}' does not match any known format. Skipping...")
+        yield PDFLTMatchException(f"PDF '{pdf_path}' does not match any known format")
+        return
+
+    match_result["Type"] = pdf_type
     LOG.debug(f"Resolved PDF type: {match_result['Type']}")
 
     # pdf_pages_iter: Iterator[LTPage] = extract_pages(
@@ -138,6 +147,7 @@ def parse_pdf(
             #         pdf_form_field_raw,
             #     )
             # else:
+
             yield from match_prev_pdf(
                 pdf_path,
                 match_result,
@@ -145,12 +155,16 @@ def parse_pdf(
                 pdf_form_fields,
             )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
-        case PDFLTFormat.MV:
+        case PDFLTFormat.MV | PDFLTFormat.PREVENTIVE_Y7:
             pdf_pages_iter: Iterator[LTPage] = extract_pages(
                 pdf_path, laparams=LAParams(char_margin=1.0)
             )
             yield from match_mv_pdf(
-                pdf_pages_iter, match_result, dataframe[PDFLTFormat.MV]
+                pdf_pages_iter,
+                match_result,
+                dataframe[
+                    pdf_type if pdf_type == PDFLTFormat.MV else PDFLTFormat.PREVENTIVE
+                ],
             )
             # LOG.debug(f'{json.dumps(parse_result, indent = 2, default = str)}')
         case _:
@@ -185,6 +199,13 @@ def parse_pdf_gen(
                 yield (page_num, page_count, parse_result)
             except StopIteration:
                 break
+
+        # TODO: Proper dynamic typing resolution of the correct excel sheet
+        parse_result["Type"] = (
+            parse_result["Type"]
+            if parse_result["Type"] == PDFLTFormat.MV
+            else PDFLTFormat.PREVENTIVE
+        )
 
         LOG.debug(f"Finished processing file '{file_path}'")
         LOG.debug(f"Writing parsed result to Excel template '{out_path}'...")

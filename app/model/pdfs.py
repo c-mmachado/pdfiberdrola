@@ -71,6 +71,7 @@ class PDFLTMatchException(PDFLTException):
 
 class PDFLTFormat(StrEnum):
     PREVENTIVE = "Preventive"
+    PREVENTIVE_Y7 = "PreventiveY7"
     MV = "MV"
     UNKNOWN = "Unknown"
 

@@ -216,7 +216,7 @@ class Window(QMainWindow, Ui_MainWindow):
             self._save_memento()
 
     # @QtCore.Slot(bool)
-    @pyqtSlot(result=bool)
+    @pyqtSlot(bool)
     def toggled_split(self, state: bool) -> None:
         self.split = state
         self._save_memento()

@@ -51,7 +51,7 @@ echo Environment variables set successfully
 
 :: Compiles the application using Nuitka and generate the application executable
 if not exist !NUITKA_DIST_DIR!\!NUITKA_EXE_NAME! (
-    !VENV_DIR!/Scripts/python -m nuitka --standalone --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyqt6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
+    !VENV_DIR!/Scripts/python -m nuitka --standalone --lto=yes --remove-output --output-dir=!NUITKA_OUT_DIR! --output-filename=!NUITKA_EXE_NAME! --windows-icon-from-ico=!PROJECT_ICON! --product-name=!PROJECT_NAME! --product-version=!APP_VERSION! --enable-plugin=pyqt6 --windows-console-mode=disable --mingw64 !PROJECT_MAIN! && (
         echo Nuitka compilation successful
     ) || (
         echo Error: Nuitka compilation failed && goto eof
