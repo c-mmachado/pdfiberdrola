@@ -181,7 +181,7 @@ pyrightconfig.json
 [Ll]ib
 [Ll]ib64
 [Ll]ocal
-[Ss]cripts
+# [Ss]cripts
 pyvenv.cfg
 pip-selfcheck.json
 
@@ -209,6 +209,6 @@ pip-selfcheck.json
 # Custom ignore rules
 logs/
 out/
-!config/*
+config/
+resources/gui/memento.json
 !scripts/*
-resources/ui/memento.json
