@@ -389,6 +389,7 @@ class PDFLTTextBox(PDFLTContainer[LTTextBox, "PDFLTTextLine"]):
 
     @property
     def text(self: Self) -> str:
+        # TODO: \n should only be added if children are on different y levels, otherwise text should be concatenated with a space
         return "\n".join([c.text for c in self.children])
 
     def __repr__(self: Self) -> str:

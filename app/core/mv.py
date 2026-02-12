@@ -515,6 +515,48 @@ def _match_mv_pdf_page_1(
         raise PDFLTMatchException("PDF is not in the expected format")
 
 
+def _has_chapter_header(headers_line: List[PDFLTRect]) -> bool:
+    if len(headers_line) > 5:
+        chapter_header_rect: PDFLTRect = headers_line[1]
+        if len(chapter_header_rect.children) > 0 and isinstance(
+            chapter_header_rect.children[0], PDFLTTextBox
+        ):
+            header: PDFLTTextBox = chapter_header_rect.children[0]
+            if header.text.strip().startswith("chapter"):
+                return True
+        
+        chapter_header_rect: PDFLTRect = headers_line[2]
+        if len(chapter_header_rect.children) > 0 and isinstance(
+            chapter_header_rect.children[0], PDFLTTextBox
+        ):
+            header: PDFLTTextBox = chapter_header_rect.children[0]
+            if header.text.strip().lower().startswith("chapter"):
+                return True
+            
+    return False
+
+def _header_idx_to_name(header_idx: int, match_result: PDFLTMatchResult, match_state: PDFLTMatchState) -> str:
+    if header_idx == 0:
+        return "Number"
+    elif header_idx == 1:
+        if _has_chapter_header(match_result["TaskHeaders"]):
+            return "Chapter"
+        else:
+            return "Description"
+    elif header_idx == 2:
+        if _has_chapter_header(match_result["TaskHeaders"]):
+            return "Description"
+        else:
+            return "Remarks"
+    elif header_idx == 3:
+        return "Remarks"
+    elif header_idx == 4:
+        return "Tools"
+    elif header_idx == 5:
+        return "Status"
+    else:
+        raise PDFLTMatchException(f"Unexpected header index {header_idx} during task '{match_state['task']}' on element '{match_state['element']}' parsing")
+
 def _match_mv_pdf_page_n_task_or_element(
     line: List[PDFLTRect] | None,
     lines_iter: Iterator[List[PDFLTRect]],
@@ -536,15 +578,39 @@ def _match_mv_pdf_page_n_task_or_element(
         ):
             task: PDFLTTextBox = task_rect.children[0]
             if not task.text.lower().startswith("location:"):
-                raise PDFLTMatchException("PDF is not in the expected format")
+                # Line might be decoupled from element if it overflows its bounding box, try to find the matching task header based on the x0 and x1
+                if not match_state["element"]:
+                    raise PDFLTMatchException(
+                        f"Unable to find a task element for decoupled line '{task.text.strip()}' \
+                        with current task '{match_state['task']}'"
+                    )
+                headers_line: List[PDFLTRect] = match_result.get("TaskHeaders", [])
+                if not headers_line:  
+                    raise PDFLTMatchException(
+                        f"Unable to find task headers line for decoupled line '{task.text.strip()}' \
+                        with current task '{match_state['task']}' and element '{match_state['element']}'"
+                    )
 
+                for header_idx, header_rect in enumerate(headers_line):
+                    x0: float = header_rect.x0
+                    x1: float = header_rect.x1
+                    header_name: str = _header_idx_to_name(header_idx, match_result, match_state)
+                    
+                    if task_rect.x0 >= x0 and task_rect.x1 <= x1:
+                        # Task is decoupled but falls within the x0 and x1 of the task headers line, assign it to the current task on matching header
+                        text: str = task.text.strip()
+                        match_result["Tasks"][match_state["task"]]['Elements'][match_state["element"]][header_name] += "\n" + text
+                        return match_result
+                raise PDFLTMatchException(f"Unable to find a matching task header for decoupled line {task.text.strip()} with x0 {task_rect.x0} and x1 {task_rect.x1}")
+
+            # Line is not decoupled, match it as a new task if it starts with 'Location:', ignoring it otherwise
             text: str = task.text.lower().replace("location:", "").strip().upper()
             match_state["task"] = text
             if text not in match_result["Tasks"]:
                 match_result["Tasks"][text] = {"WTGSection": text, "Elements": {}}
     elif len(line) > 1:
         # Line contains the task element
-        # Must contain at least 5 elements (Number, Description, Remarks, Tools, Status)
+        # Must contain at least 5 elements (Number, [Chapter], Description, Remarks, Tools, Status)
         if len(line) < 5:
             raise PDFLTMatchException("PDF is not in the expected format")
 
@@ -566,10 +632,16 @@ def _match_mv_pdf_page_n_task_or_element(
                     "Tools": "",
                     "Status": "",
                     "Measures": {},
+                    "Chapter": ""
                 }
 
+        header_idx = 1
+        has_chapter: bool = _has_chapter_header(match_result["TaskHeaders"])
+        if has_chapter:
+            header_idx += 1
+
         # Match element description
-        description_rect: PDFLTRect = line[1]
+        description_rect: PDFLTRect = line[header_idx]
         if len(description_rect.children) > 0 and isinstance(
             description_rect.children[0], PDFLTTextBox
         ):
@@ -585,8 +657,10 @@ def _match_mv_pdf_page_n_task_or_element(
                 measure_rect: PDFLTRect = description_rect.children[i]
                 _match_mv_pdf_page_n_measure(measure_rect, match_state, match_result)
 
+
         # Match element remarks
-        remarks_rect: PDFLTRect = line[2]
+        header_idx += 1
+        remarks_rect: PDFLTRect = line[header_idx]
         if len(remarks_rect.children) > 0 and isinstance(
             remarks_rect.children[0], PDFLTTextBox
         ):
@@ -598,7 +672,8 @@ def _match_mv_pdf_page_n_task_or_element(
                 ]["Remarks"] += remarks.text.strip() + "\n"
 
         # Match element tools
-        tools_rect: PDFLTRect = line[3]
+        header_idx += 1
+        tools_rect: PDFLTRect = line[header_idx]
         if len(tools_rect.children) > 0 and isinstance(
             tools_rect.children[0], PDFLTTextBox
         ):
@@ -608,15 +683,28 @@ def _match_mv_pdf_page_n_task_or_element(
             ]["Tools"] = tools.text.strip()
 
         # Match element status
-        status_rect: PDFLTRect = line[4]
+        header_idx += 1
+        status_rect: PDFLTRect = line[header_idx]
         if len(status_rect.children) > 0:
+            # Status can be either a text box with the status text or a green/red curve indicating OK/NOT OK
+            # Additionally due to the overflow of 'Not Applicable' status preceding this a text box with the parts of the previous element status
+            # might be present here check if curve is present and if so use curve, otherwise fallback to text box if present 
+            real_status = None
             if isinstance(status_rect.children[0], PDFLTTextBox):
                 status_text: PDFLTTextBox = status_rect.children[0]
+                real_status = [c for c in status_text.children if isinstance(c, PDFLTCurve)]
+                real_status = real_status[0] if len(real_status) > 0 else None
+                if not real_status:
+                    real_status = status_text
+            else:
+                real_status = status_rect.children[0]
+            
+            if isinstance(real_status, PDFLTTextBox):
                 match_result["Tasks"][match_state["task"]]["Elements"][
                     match_state["element"]
-                ]["Status"] = status_text.text.strip()
-            elif isinstance(status_rect.children[0], PDFLTCurve):
-                status_curve: PDFLTCurve = status_rect.children[0]
+                ]["Status"] = real_status.text.strip()
+            elif isinstance(real_status, PDFLTCurve):
+                status_curve: PDFLTCurve = real_status # status_rect.children[0]
                 # Curve is green or red
                 bgcolor: Color | None = status_curve.element.stroking_color
                 dg: float = sqrt(
@@ -829,6 +917,7 @@ def _match_mv_pdf_page_n(
                 header: PDFLTTextBox = header_rect.children[0]
                 text: str = header.text.strip().lower()
                 if text.startswith("#"):
+                    match_result["TaskHeaders"] = line
                     break
 
         # Fetch the next lines containing the task names or task elements
